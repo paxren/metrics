@@ -9,6 +9,7 @@ import (
 	"github.com/paxren/metrics/internal/models"
 )
 
+// тесты сгенерированы roo code
 func TestUpdateMetric(t *testing.T) {
 	// Create a fresh storage for each test
 	originalStorage := memStorage
