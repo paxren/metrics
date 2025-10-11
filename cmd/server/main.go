@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/paxren/metrics/internal/models"
 )
 
 // type Metrics interface {
@@ -18,34 +20,34 @@ import (
 // }
 
 // ПОТОКО НЕБЕЗОПАСНО!
-var memStorage MemStorage
+var memStorage *models.MemStorage = models.MakeMemStorage()
 
-type MemStorage struct {
-	counters map[string][]int64
-	gauges   map[string]float64
-}
+// type MemStorage struct {
+// 	counters map[string][]int64
+// 	gauges   map[string]float64
+// }
 
-func (m *MemStorage) UpdateGauge(key string, value float64) error {
+// func (m *MemStorage) UpdateGauge(key string, value float64) error {
 
-	m.gauges[key] = value
-	return nil
-}
+// 	m.gauges[key] = value
+// 	return nil
+// }
 
-func (m *MemStorage) UpdateCounter(key string, value int64) error {
+// func (m *MemStorage) UpdateCounter(key string, value int64) error {
 
-	c, ok := m.counters[key]
+// 	c, ok := m.counters[key]
 
-	if !ok {
-		c = make([]int64, 0)
+// 	if !ok {
+// 		c = make([]int64, 0)
 
-	}
+// 	}
 
-	c = append(c, value)
+// 	c = append(c, value)
 
-	m.counters[key] = c
+// 	m.counters[key] = c
 
-	return nil
-}
+// 	return nil
+// }
 
 func updateMetric(res http.ResponseWriter, req *http.Request) {
 	//res.Write([]byte("Привет!"))
@@ -100,14 +102,12 @@ func updateMetric(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte(fmt.Sprintf("elems: %v memStorage: %v \r\n", elems, memStorage)))
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
+	fmt.Println(req.URL)
 }
 
 func main() {
 
-	memStorage = MemStorage{
-		counters: make(map[string][]int64),
-		gauges:   make(map[string]float64),
-	}
+	//memStorage := models.MakeMemStorage()
 
 	mux := http.NewServeMux()
 
