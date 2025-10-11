@@ -156,7 +156,7 @@ func getMetric(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		stringValue = strconv.FormatFloat(v, 'f', 2, 64)
+		stringValue = strconv.FormatFloat(v, 'f', 3, 64)
 	}
 
 	res.Write([]byte(stringValue))

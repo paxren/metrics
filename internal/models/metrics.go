@@ -8,8 +8,8 @@ const (
 )
 
 var (
-	GaugeNotFound   = errors.New("метрика gauge не найдена")
-	CounterNotFound = errors.New("метрика gauge не найдена")
+	ErrGaugeNotFound   = errors.New("метрика gauge не найдена")
+	ErrCounterNotFound = errors.New("метрика gauge не найдена")
 )
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
@@ -49,7 +49,7 @@ func (m *MemStorage) GetGauge(key string) (float64, error) {
 	v, ok := m.gauges[key]
 
 	if !ok {
-		return 0, GaugeNotFound
+		return 0, ErrGaugeNotFound
 	}
 
 	return v, nil
@@ -60,7 +60,7 @@ func (m *MemStorage) GetCounter(key string) (int64, error) {
 	v, ok := m.counters[key]
 
 	if !ok {
-		return 0, CounterNotFound
+		return 0, ErrCounterNotFound
 	}
 
 	return v, nil
