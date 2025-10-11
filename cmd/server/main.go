@@ -180,7 +180,7 @@ func getMain(res http.ResponseWriter, req *http.Request) {
     </body>
 </html>`
 
-	var formMetrics string = `<label>Метрики gauges:</label><br/>`
+	var formMetrics = `<label>Метрики gauges:</label><br/>`
 	gauges := memStorage.GetGauges()
 
 	for k, v := range gauges {
@@ -194,7 +194,7 @@ func getMain(res http.ResponseWriter, req *http.Request) {
 		formMetrics += fmt.Sprintf(`<label>%s = %d</label><br/>`, k, v)
 	}
 
-	var form string = formStart + formMetrics + formEnd
+	var form = formStart + formMetrics + formEnd
 
 	res.Write([]byte(form))
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
