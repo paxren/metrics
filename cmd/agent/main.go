@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"runtime"
 	"time"
 
+	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
 
 	"io"
@@ -14,12 +16,25 @@ import (
 	"strconv"
 )
 
+var (
+	hostAdress           = config.NewHostAddress()
+	reportInterval int64 = 10
+	pollInterval   int64 = 2
+)
+
+func init() {
+	// используем init-функцию
+	flag.Var(hostAdress, "a", "Net address host:port")
+	flag.Int64Var(&reportInterval, "r", 10, "reportInterval")
+	flag.Int64Var(&pollInterval, "p", 2, "pollInterval")
+}
+
 func Send(memStorage *models.MemStorage) {
 
 	client := http.Client{}
 
 	for k, v := range memStorage.GetGauges() {
-		request, err := http.NewRequest(http.MethodPost, "http://localhost:8080/update/gauge/"+k+"/"+strconv.FormatFloat(v, 'f', 2, 64), nil)
+		request, err := http.NewRequest(http.MethodPost, "http://"+hostAdress.String()+"/update/gauge/"+k+"/"+strconv.FormatFloat(v, 'f', 2, 64), nil)
 		if err != nil {
 			panic(err)
 		}
@@ -34,7 +49,7 @@ func Send(memStorage *models.MemStorage) {
 	}
 
 	for k, v := range memStorage.GetCounters() {
-		request, err := http.NewRequest(http.MethodPost, "http://localhost:8080/update/counter/"+k+"/"+strconv.FormatInt(v, 10), nil)
+		request, err := http.NewRequest(http.MethodPost, "http://"+hostAdress.String()+"/update/counter/"+k+"/"+strconv.FormatInt(v, 10), nil)
 		if err != nil {
 			panic(err)
 		}
@@ -85,6 +100,10 @@ func Add(memStorage *models.MemStorage, memStats *runtime.MemStats) {
 
 func main() {
 
+	flag.Parse()
+
+	fmt.Printf("report interval: %d \r\n poll interval: %d \r\n", reportInterval, pollInterval)
+
 	var memStats runtime.MemStats
 
 	memStorage := models.MakeMemStorage()
@@ -93,8 +112,8 @@ func main() {
 	var randFloat float64
 	//var test int64
 
-	pollTicker := time.NewTicker(2000 * time.Millisecond)
-	reportTicker := time.NewTicker(10 * time.Second)
+	pollTicker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	reportTicker := time.NewTicker(time.Duration(reportInterval) * time.Second)
 
 	for {
 

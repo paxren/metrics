@@ -1,55 +1,27 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// type Metrics interface {
-// 	UpdateGauge(string,float64) error
-// 	UpdateCounter(string,int64) error
-// }
+var hostAdress = config.NewHostAddress()
 
-// type Metric struct {
-// 	counter []int64
-// 	gauge   float64
-// }
+func init() {
+	// используем init-функцию
+	flag.Var(hostAdress, "a", "Net address host:port")
+}
 
 // ПОТОКО НЕБЕЗОПАСНО!
 var memStorage *models.MemStorage = models.MakeMemStorage()
-
-// type MemStorage struct {
-// 	counters map[string][]int64
-// 	gauges   map[string]float64
-// }
-
-// func (m *MemStorage) UpdateGauge(key string, value float64) error {
-
-// 	m.gauges[key] = value
-// 	return nil
-// }
-
-// func (m *MemStorage) UpdateCounter(key string, value int64) error {
-
-// 	c, ok := m.counters[key]
-
-// 	if !ok {
-// 		c = make([]int64, 0)
-
-// 	}
-
-// 	c = append(c, value)
-
-// 	m.counters[key] = c
-
-// 	return nil
-// }
 
 func updateMetric(res http.ResponseWriter, req *http.Request) {
 	//res.Write([]byte("Привет!"))
@@ -204,13 +176,17 @@ func getMain(res http.ResponseWriter, req *http.Request) {
 
 func main() {
 
+	flag.Parse()
+
+	//fmt.Printf("host param: %s", hostAdress.String())
+
 	r := chi.NewRouter()
 
 	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, updateMetric)
 	r.Get(`/value/{metric_type}/{metric_name}`, getMetric)
 	r.Get(`/`, getMain)
 
-	err := http.ListenAndServe(`:8080`, r)
+	err := http.ListenAndServe(hostAdress.String(), r)
 	if err != nil {
 		panic(err)
 	}
