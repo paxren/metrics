@@ -1,29 +1,23 @@
 package handler
 
+//сгенерировано roo code + glm 4.6
+
 import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/paxren/metrics/internal/models"
+	"github.com/paxren/metrics/internal/repository"
 )
 
-// тесты сгенерированы roo code
 func TestUpdateMetric(t *testing.T) {
-	// Create a fresh storage for each test
-	originalStorage := memStorage
-	defer func() {
-		memStorage = originalStorage
-	}()
-
 	tests := []struct {
 		name           string
 		method         string
 		url            string
 		expectedStatus int
 		expectedBody   string
-		setupFunc      func()
 	}{
 		{
 			name:           "Valid gauge metric",
@@ -31,9 +25,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/36.6",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Valid counter metric",
@@ -41,9 +32,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/counter/requests/42",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid HTTP method (GET)",
@@ -51,9 +39,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/36.6",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedBody:   "",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid URL path - too few segments",
@@ -61,9 +46,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature",
 			expectedStatus: http.StatusNotFound,
 			expectedBody:   "неверное количество параметров",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid URL path - too many segments",
@@ -71,9 +53,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/36.6/extra",
 			expectedStatus: http.StatusNotFound,
 			expectedBody:   "неверное количество параметров",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid metric type",
@@ -81,9 +60,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/invalid/temperature/36.6",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Некорректный тип метрики",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Empty metric name",
@@ -91,9 +67,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge//36.6",
 			expectedStatus: http.StatusNotFound,
 			expectedBody:   "Пустое имя метрики",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid gauge value (not a number)",
@@ -101,9 +74,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/invalid",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Некорректное значение метрики",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Invalid counter value (not a number)",
@@ -111,9 +81,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/counter/requests/invalid",
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "Некорректное значение метрики",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Negative gauge value",
@@ -121,9 +88,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/-10.5",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Negative counter value",
@@ -131,9 +95,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/counter/requests/-5",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Zero gauge value",
@@ -141,9 +102,6 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/gauge/temperature/0",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 		{
 			name:           "Zero counter value",
@@ -151,18 +109,14 @@ func TestUpdateMetric(t *testing.T) {
 			url:            "/update/counter/requests/0",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "elems:",
-			setupFunc: func() {
-				memStorage = models.MakeMemStorage()
-			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup test environment
-			if tt.setupFunc != nil {
-				tt.setupFunc()
-			}
+			// Create a fresh storage and handler for each test
+			memStorage := repository.MakeMemStorage()
+			handler := NewHandler(memStorage)
 
 			// Create request
 			req := httptest.NewRequest(tt.method, tt.url, nil)
@@ -174,7 +128,7 @@ func TestUpdateMetric(t *testing.T) {
 			rr := httptest.NewRecorder()
 
 			// Call the handler
-			updateMetric(rr, req)
+			handler.UpdateMetric(rr, req)
 
 			// Check status code
 			if status := rr.Code; status != tt.expectedStatus {
@@ -198,12 +152,12 @@ func TestUpdateMetric(t *testing.T) {
 
 					switch metricType {
 					case "gauge":
-						if _, exists := memStorage.GetGauges()[metricName]; !exists {
-							t.Errorf("Gauge metric %s was not stored in memory", metricName)
+						if _, err := memStorage.GetGauge(metricName); err != nil {
+							t.Errorf("Gauge metric %s was not stored in memory: %v", metricName, err)
 						}
 					case "counter":
-						if _, exists := memStorage.GetCounters()[metricName]; !exists {
-							t.Errorf("Counter metric %s was not stored in memory", metricName)
+						if _, err := memStorage.GetCounter(metricName); err != nil {
+							t.Errorf("Counter metric %s was not stored in memory: %v", metricName, err)
 						}
 					}
 				}
@@ -213,83 +167,75 @@ func TestUpdateMetric(t *testing.T) {
 }
 
 func TestUpdateMetricStorageIntegration(t *testing.T) {
-	// Create a fresh storage
-	memStorage = models.MakeMemStorage()
-	defer func() {
-		memStorage = models.MakeMemStorage()
-	}()
+	// Create a fresh storage and handler
+	memStorage := repository.MakeMemStorage()
+	handler := NewHandler(memStorage)
 
 	// Test gauge metric storage
 	req := httptest.NewRequest("POST", "/update/gauge/test_gauge/123.45", nil)
 	rr := httptest.NewRecorder()
-	updateMetric(rr, req)
+	handler.UpdateMetric(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status OK, got %v", rr.Code)
 	}
 
 	// Check if gauge was stored
-	gauges := memStorage.GetGauges()
-	if value, exists := gauges["test_gauge"]; !exists || value != 123.45 {
-		t.Errorf("Gauge metric not stored correctly: got %v, want 123.45", value)
+	if value, err := memStorage.GetGauge("test_gauge"); err != nil || value != 123.45 {
+		t.Errorf("Gauge metric not stored correctly: got %v, want 123.45, error: %v", value, err)
 	}
 
 	// Test counter metric storage
 	req = httptest.NewRequest("POST", "/update/counter/test_counter/100", nil)
 	rr = httptest.NewRecorder()
-	updateMetric(rr, req)
+	handler.UpdateMetric(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status OK, got %v", rr.Code)
 	}
 
 	// Check if counter was stored
-	counters := memStorage.GetCounters()
-	if value, exists := counters["test_counter"]; !exists || value != 100 {
-		t.Errorf("Counter metric not stored correctly: got %v, want 100", value)
+	if value, err := memStorage.GetCounter("test_counter"); err != nil || value != 100 {
+		t.Errorf("Counter metric not stored correctly: got %v, want 100, error: %v", value, err)
 	}
 
 	// Test counter accumulation (should add to existing value)
 	req = httptest.NewRequest("POST", "/update/counter/test_counter/50", nil)
 	rr = httptest.NewRecorder()
-	updateMetric(rr, req)
+	handler.UpdateMetric(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status OK, got %v", rr.Code)
 	}
 
 	// Check if counter was accumulated
-	counters = memStorage.GetCounters()
-	if value, exists := counters["test_counter"]; !exists || value != 150 {
-		t.Errorf("Counter metric not accumulated correctly: got %v, want 150", value)
+	if value, err := memStorage.GetCounter("test_counter"); err != nil || value != 150 {
+		t.Errorf("Counter metric not accumulated correctly: got %v, want 150, error: %v", value, err)
 	}
 
 	// Test gauge overwrite (should replace existing value)
 	req = httptest.NewRequest("POST", "/update/gauge/test_gauge/999.99", nil)
 	rr = httptest.NewRecorder()
-	updateMetric(rr, req)
+	handler.UpdateMetric(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status OK, got %v", rr.Code)
 	}
 
 	// Check if gauge was overwritten
-	gauges = memStorage.GetGauges()
-	if value, exists := gauges["test_gauge"]; !exists || value != 999.99 {
-		t.Errorf("Gauge metric not overwritten correctly: got %v, want 999.99", value)
+	if value, err := memStorage.GetGauge("test_gauge"); err != nil || value != 999.99 {
+		t.Errorf("Gauge metric not overwritten correctly: got %v, want 999.99, error: %v", value, err)
 	}
 }
 
 func BenchmarkUpdateMetric(b *testing.B) {
-	memStorage = models.MakeMemStorage()
-	defer func() {
-		memStorage = models.MakeMemStorage()
-	}()
+	memStorage := repository.MakeMemStorage()
+	handler := NewHandler(memStorage)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		req := httptest.NewRequest("POST", "/update/gauge/benchmark_metric/123.45", nil)
 		rr := httptest.NewRecorder()
-		updateMetric(rr, req)
+		handler.UpdateMetric(rr, req)
 	}
 }

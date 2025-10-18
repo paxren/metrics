@@ -168,7 +168,7 @@ func (h Handler) GetMain(res http.ResponseWriter, req *http.Request) {
 	for _, vkey := range countersKeys {
 		vv, err := h.repo.GetCounter(vkey)
 		if err == nil {
-			formMetrics += fmt.Sprintf(`<label>%s = %f</label><br/>`, vkey, vv)
+			formMetrics += fmt.Sprintf(`<label>%s = %d</label><br/>`, vkey, vv)
 		} else {
 			formMetrics += fmt.Sprintf(`<label>%s = READ ERROR</label><br/>`, vkey)
 		}
