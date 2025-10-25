@@ -11,6 +11,7 @@ import (
 	"github.com/paxren/metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 var hostAdress = config.NewHostAddress()
@@ -22,11 +23,28 @@ func init() {
 
 func main() {
 
+	//init logger
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		// вызываем панику, если ошибка
+		panic("cannot initialize zap")
+	}
+	defer logger.Sync()
+
+	hlog := handler.NewLogger(logger)
+	sugar := logger.Sugar()
+
+	// init params & envs
 	adr := os.Getenv("ADDRESS")
 
-	err1 := hostAdress.Set(adr)
+	err = hostAdress.Set(adr)
 
-	if err1 != nil {
+	if err != nil {
+		sugar.Infow(
+			"Failed to set address",
+			"error", err,
+			"adr", adr,
+		)
 		flag.Parse()
 	}
 
@@ -37,12 +55,16 @@ func main() {
 
 	r := chi.NewRouter()
 
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, handler.UpdateMetric)
-	r.Get(`/value/{metric_type}/{metric_name}`, handler.GetMetric)
-	r.Get(`/`, handler.GetMain)
+	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handler.UpdateMetric))
+	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handler.GetMetric))
+	r.Get(`/`, hlog.WithLogging(handler.GetMain))
 
-	err := http.ListenAndServe(hostAdress.String(), r)
+	err = http.ListenAndServe(hostAdress.String(), r)
 	if err != nil {
+		sugar.Infow(
+			"Failed to serve listener",
+			"error", err,
+		)
 		panic(err)
 	}
 
