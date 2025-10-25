@@ -2,7 +2,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/handler"
@@ -20,7 +22,15 @@ func init() {
 
 func main() {
 
-	flag.Parse()
+	adr := os.Getenv("ADDRESS")
+
+	err1 := hostAdress.Set(adr)
+
+	if err1 != nil {
+		flag.Parse()
+	}
+
+	fmt.Println(hostAdress)
 
 	handler := handler.NewHandler(repository.MakeMemStorage())
 	//fmt.Printf("host param: %s", hostAdress.String())

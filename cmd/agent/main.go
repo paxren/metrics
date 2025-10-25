@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -11,24 +12,72 @@ import (
 	"github.com/paxren/metrics/internal/repository"
 
 	"math/rand"
+
+	"github.com/caarlos0/env/v11"
 )
 
 var (
 	hostAdress           = config.NewHostAddress()
 	reportInterval int64 = 10
 	pollInterval   int64 = 2
+
+	paramHostAdress           = config.NewHostAddress()
+	paramReportInterval int64 = 10
+	paramPollInterval   int64 = 2
 )
+
+type ConfigRI struct {
+	val string `env:"REPORT_INTERVAL1,required"`
+}
+
+type ConfigPI struct {
+	val int64 `env:"POLL_INTERVAL"`
+}
 
 func init() {
 	// используем init-функцию
-	flag.Var(hostAdress, "a", "Net address host:port")
-	flag.Int64Var(&reportInterval, "r", 10, "reportInterval")
-	flag.Int64Var(&pollInterval, "p", 2, "pollInterval")
+	flag.Var(paramHostAdress, "a", "Net address host:port")
+	flag.Int64Var(&paramReportInterval, "r", 10, "reportInterval")
+	flag.Int64Var(&paramPollInterval, "p", 2, "pollInterval")
 }
 
 func main() {
 
 	flag.Parse()
+	//========== ADDRESS
+	adr := os.Getenv("ADDRESS")
+
+	err1 := hostAdress.Set(adr)
+	if err1 != nil {
+		hostAdress = paramHostAdress
+	}
+
+	fmt.Println(hostAdress)
+
+	//========= INTERVASLS
+	mp := env.ToMap(os.Environ())
+	fmt.Printf("mp=%v  \n", mp)
+
+	var ri ConfigRI
+	err2 := env.Parse(&ri)
+	fmt.Printf("ri=%v  err=%v \n", ri, err2)
+	if err2 != nil {
+		reportInterval = paramReportInterval
+	} else {
+		reportInterval = 1 //ri.val
+	}
+
+	os.Exit(1)
+
+	var pi ConfigPI
+	err3 := env.Parse(&pi)
+	fmt.Println(pi)
+	if err3 != nil {
+		pollInterval = paramPollInterval
+	} else {
+		pollInterval = pi.val
+	}
+	//======== START
 
 	fmt.Printf("report interval: %d \r\n poll interval: %d \r\n", reportInterval, pollInterval)
 
