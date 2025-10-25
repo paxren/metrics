@@ -27,11 +27,11 @@ var (
 )
 
 type ConfigRI struct {
-	val string `env:"REPORT_INTERVAL1,required"`
+	Val int64 `env:"REPORT_INTERVAL,required"`
 }
 
 type ConfigPI struct {
-	val int64 `env:"POLL_INTERVAL"`
+	Val int64 `env:"POLL_INTERVAL,required"`
 }
 
 func init() {
@@ -55,27 +55,31 @@ func main() {
 	fmt.Println(hostAdress)
 
 	//========= INTERVASLS
-	mp := env.ToMap(os.Environ())
-	fmt.Printf("mp=%v  \n", mp)
 
 	var ri ConfigRI
 	err2 := env.Parse(&ri)
 	fmt.Printf("ri=%v  err=%v \n", ri, err2)
 	if err2 != nil {
+		//fmt.Printf("Error parsing REPORT_INTERVAL1: %v, using default value\n", err2)
 		reportInterval = paramReportInterval
 	} else {
-		reportInterval = 1 //ri.val
+		//fmt.Printf("Successfully parsed REPORT_INTERVAL1: %d\n", ri.Val)
+		reportInterval = ri.Val
 	}
 
-	os.Exit(1)
+	// Убираем os.Exit(1), чтобы программа продолжала выполнение
+	// os.Exit(1)
 
 	var pi ConfigPI
 	err3 := env.Parse(&pi)
-	fmt.Println(pi)
+	//fmt.Printf("POLL_INTERVAL from os.Getenv: %s\n", os.Getenv("POLL_INTERVAL"))
+	fmt.Printf("pi=%v  err=%v \n", pi, err3)
 	if err3 != nil {
+		//fmt.Printf("Error parsing POLL_INTERVAL: %v, using default value\n", err3)
 		pollInterval = paramPollInterval
 	} else {
-		pollInterval = pi.val
+		//fmt.Printf("Successfully parsed POLL_INTERVAL: %d\n", pi.Val)
+		pollInterval = pi.Val
 	}
 	//======== START
 
