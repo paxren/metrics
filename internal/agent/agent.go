@@ -45,13 +45,13 @@ func (a Agent) Send() []error {
 			metricOut.ID = vkey
 			metricOut.Value = &vv
 			metricOut.MType = models.Gauge
-			metricJson, err := json.Marshal(metricOut)
+			metricJSON, err := json.Marshal(metricOut)
 			if err != nil {
 				errors = append(errors, err)
 				continue
 			}
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJson))
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJSON))
 			if err != nil {
 				errors = append(errors, err)
 			}
@@ -79,13 +79,13 @@ func (a Agent) Send() []error {
 			metricOut.ID = vkey
 			metricOut.Delta = &vv
 			metricOut.MType = models.Gauge
-			metricJson, err := json.Marshal(metricOut)
+			metricJSON, err := json.Marshal(metricOut)
 			if err != nil {
 				errors = append(errors, err)
 				continue
 			}
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJson))
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJSON))
 			if err != nil {
 				errors = append(errors, err)
 			}
