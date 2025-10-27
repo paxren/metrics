@@ -4,12 +4,15 @@ import (
 	"runtime"
 
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
 
 	"io"
 	"net/http"
 	"os"
-	"strconv"
+
+	"bytes"
+	"encoding/json"
 )
 
 type Agent struct {
@@ -32,20 +35,32 @@ func (a Agent) Send() []error {
 
 	gaugesKeys := a.Repo.GetGaugesKeys()
 
+	var metricOut models.Metrics
 	for _, vkey := range gaugesKeys {
 
 		vv, err := a.Repo.GetGauge(vkey)
 
 		if err == nil {
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update/gauge/"+vkey+"/"+strconv.FormatFloat(vv, 'f', 2, 64), nil)
+			metricOut.ID = vkey
+			metricOut.Value = &vv
+			metricOut.MType = models.Gauge
+			metricJson, err := json.Marshal(metricOut)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJson))
 			if err != nil {
 				errors = append(errors, err)
 			}
-			request.Header.Set(`Content-Type`, `text/plain`)
+			request.Header.Set(`Content-Type`, `application/json`)
+
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
+				continue
 			}
 			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
 			response.Body.Close()
@@ -61,11 +76,20 @@ func (a Agent) Send() []error {
 		vv, err := a.Repo.GetCounter(vkey)
 
 		if err == nil {
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update/counter/"+vkey+"/"+strconv.FormatInt(vv, 10), nil)
+			metricOut.ID = vkey
+			metricOut.Delta = &vv
+			metricOut.MType = models.Gauge
+			metricJson, err := json.Marshal(metricOut)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJson))
 			if err != nil {
 				errors = append(errors, err)
 			}
-			request.Header.Set(`Content-Type`, `text/plain`)
+			request.Header.Set(`Content-Type`, `application/json`)
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
