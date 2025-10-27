@@ -60,7 +60,7 @@ func (a Agent) Send() []error {
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
-				continue
+				//continue
 			}
 			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
 			response.Body.Close()
@@ -78,7 +78,7 @@ func (a Agent) Send() []error {
 		if err == nil {
 			metricOut.ID = vkey
 			metricOut.Delta = &vv
-			metricOut.MType = models.Gauge
+			metricOut.MType = models.Counter
 			metricJSON, err := json.Marshal(metricOut)
 			if err != nil {
 				errors = append(errors, err)

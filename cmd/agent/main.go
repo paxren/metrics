@@ -106,11 +106,11 @@ func main() {
 			PollCount++
 
 			agent.Repo.UpdateCounter("PollCount", PollCount)
-			//test, _ = memStorage.GetCounter("PollCount")
+			//test1, _ = agent.Repo.GetCounter("PollCount")
 			randFloat = rand.Float64()
 			agent.Repo.UpdateGauge("RandomValue", randFloat)
-			//fmt.Printf("memstorage: %v \r\n", memStorage)
-			//fmt.Printf("memstorage: %v \r\n", test)
+			//fmt.Printf("memstorage: %v \r\n", agent.Repo)
+			//fmt.Printf("memstorage: %v \r\n", test1)
 			agent.Add(&memStats)
 		case <-reportTicker.C:
 			fmt.Println("отправляю данные")
