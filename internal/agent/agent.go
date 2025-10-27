@@ -60,7 +60,7 @@ func (a Agent) Send() []error {
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
-				//continue
+				continue
 			}
 			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
 			response.Body.Close()
@@ -93,6 +93,7 @@ func (a Agent) Send() []error {
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
+				continue
 			}
 			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
 			response.Body.Close()
