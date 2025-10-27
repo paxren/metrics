@@ -2,6 +2,7 @@ package agent
 
 import (
 	"runtime"
+	"strings"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
@@ -12,6 +13,7 @@ import (
 	"os"
 
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 )
 
@@ -51,19 +53,66 @@ func (a Agent) Send() []error {
 				continue
 			}
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJSON))
+			var gzipped bytes.Buffer
+			// создаём переменную w — в неё будут записываться входящие данные,
+			// которые будут сжиматься и сохраняться в bytes.Buffer
+			w := gzip.NewWriter(&gzipped)
+
+			_, err = w.Write(metricJSON)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			err = w.Close()
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", &gzipped)
 			if err != nil {
 				errors = append(errors, err)
 			}
 			request.Header.Set(`Content-Type`, `application/json`)
+			request.Header.Set(`Accept-Encoding`, `gzip`)
+			request.Header.Set(`Content-Encoding`, `gzip`)
 
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
 				continue
 			}
-			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
-			response.Body.Close()
+			defer response.Body.Close()
+
+			//response.Header.Get("Content-Encoding")
+			contentEncoding := response.Header.Get("Content-Encoding")
+			receiveGzip := strings.Contains(contentEncoding, "gzip")
+
+			if receiveGzip {
+
+				// переменная r будет читать входящие данные и распаковывать их
+				r, err := gzip.NewReader(response.Body)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				}
+				defer r.Close()
+
+				var b bytes.Buffer
+				// в переменную b записываются распакованные данные
+				_, err = b.ReadFrom(r)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				}
+
+				io.Copy(os.Stdout, &b) // вывод ответа в консоль
+				//fmt.Println(1)
+			} else {
+				//TODO сжатый другим методом или несжатый
+				//io.Copy(os.Stdout, response.Body)
+			}
+			//response.Body.Close()
 		} else {
 			errors = append(errors, err)
 		}
@@ -85,18 +134,65 @@ func (a Agent) Send() []error {
 				continue
 			}
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", bytes.NewBuffer(metricJSON))
+			var gzipped bytes.Buffer
+			// создаём переменную w — в неё будут записываться входящие данные,
+			// которые будут сжиматься и сохраняться в bytes.Buffer
+			w := gzip.NewWriter(&gzipped)
+
+			_, err = w.Write(metricJSON)
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+			err = w.Close()
+			if err != nil {
+				errors = append(errors, err)
+				continue
+			}
+
+			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", &gzipped)
 			if err != nil {
 				errors = append(errors, err)
 			}
 			request.Header.Set(`Content-Type`, `application/json`)
+			request.Header.Set(`Accept-Encoding`, `gzip`)
+			request.Header.Set(`Content-Encoding`, `gzip`)
 			response, err := client.Do(request)
 			if err != nil {
 				errors = append(errors, err)
 				continue
 			}
-			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
-			response.Body.Close()
+			defer response.Body.Close()
+
+			//response.Header.Get("Content-Encoding")
+			contentEncoding := response.Header.Get("Content-Encoding")
+			receiveGzip := strings.Contains(contentEncoding, "gzip")
+
+			if receiveGzip {
+
+				// переменная r будет читать входящие данные и распаковывать их
+				r, err := gzip.NewReader(response.Body)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				}
+				defer r.Close()
+
+				var b bytes.Buffer
+				// в переменную b записываются распакованные данные
+				_, err = b.ReadFrom(r)
+				if err != nil {
+					errors = append(errors, err)
+					continue
+				}
+
+				io.Copy(os.Stdout, &b) // вывод ответа в консоль
+				//fmt.Println(1)
+			} else {
+				//TODO сжатый другим методом или несжатый
+				//io.Copy(os.Stdout, response.Body)
+			}
+			//response.Body.Close()
 		} else {
 			errors = append(errors, err)
 		}

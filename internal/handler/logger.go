@@ -10,8 +10,9 @@ import (
 type (
 	// берём структуру для хранения сведений об ответе
 	responseData struct {
-		status int
-		size   int
+		status  int
+		size    int
+		headers http.Header
 	}
 
 	// добавляем реализацию http.ResponseWriter
@@ -39,8 +40,9 @@ func (l Logger) WithLogging(h http.HandlerFunc) http.HandlerFunc {
 		start := time.Now()
 
 		responseData := &responseData{
-			status: 0,
-			size:   0,
+			status:  0,
+			size:    0,
+			headers: nil,
 		}
 		lw := loggingResponseWriter{
 			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
@@ -62,6 +64,8 @@ func (l Logger) WithLogging(h http.HandlerFunc) http.HandlerFunc {
 			"status", responseData.status, // получаем перехваченный код статуса ответа
 			"duration", duration,
 			"size", responseData.size, // получаем перехваченный размер ответа
+			"requestHeaders", r.Header,
+			"responceHeaders", responseData.headers,
 		)
 
 	}
@@ -80,4 +84,11 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	// записываем код статуса, используя оригинальный http.ResponseWriter
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode // захватываем код статуса
+}
+
+func (r *loggingResponseWriter) Header() http.Header {
+
+	r.responseData.headers = r.ResponseWriter.Header() // захватываем заголовки ответа
+
+	return r.ResponseWriter.Header()
 }

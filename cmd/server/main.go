@@ -50,18 +50,18 @@ func main() {
 
 	fmt.Println(hostAdress)
 
-	handler := handler.NewHandler(repository.MakeMemStorage())
+	handlerv := handler.NewHandler(repository.MakeMemStorage())
 	//fmt.Printf("host param: %s", hostAdress.String())
 
 	r := chi.NewRouter()
 
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handler.UpdateMetric))
-	r.Post(`/value/`, hlog.WithLogging(handler.GetValueJSON))
-	r.Post(`/update/`, hlog.WithLogging(handler.UpdateJSON))
-	r.Post(`/value`, hlog.WithLogging(handler.GetValueJSON))
-	r.Post(`/update`, hlog.WithLogging(handler.UpdateJSON))
-	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handler.GetMetric))
-	r.Get(`/`, hlog.WithLogging(handler.GetMain))
+	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
+	r.Post(`/value/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON)))
+	r.Post(`/update/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON)))
+	r.Post(`/value`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON)))
+	r.Post(`/update`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON)))
+	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
+	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
 
 	err = http.ListenAndServe(hostAdress.String(), r)
 	if err != nil {

@@ -180,7 +180,12 @@ func (h Handler) GetMain(res http.ResponseWriter, req *http.Request) {
 
 	var form = formStart + formMetrics + formEnd
 
+	res.Header().Set("Content-Type", "text/html ; charset=utf-8")
+	//res.Header().Set("Content-Type", "")
+
+	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(form))
+
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
 	fmt.Println(req.URL)
