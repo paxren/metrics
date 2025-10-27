@@ -108,10 +108,10 @@ func (a Agent) Send() []error {
 
 				io.Copy(os.Stdout, &b) // вывод ответа в консоль
 				//fmt.Println(1)
-			} else {
-				//TODO сжатый другим методом или несжатый
-				//io.Copy(os.Stdout, response.Body)
-			}
+			} //else {
+			//TODO сжатый другим методом или несжатый
+			//io.Copy(os.Stdout, response.Body)
+			//}
 			//response.Body.Close()
 		} else {
 			errors = append(errors, err)
@@ -188,10 +188,10 @@ func (a Agent) Send() []error {
 
 				io.Copy(os.Stdout, &b) // вывод ответа в консоль
 				//fmt.Println(1)
-			} else {
-				//TODO сжатый другим методом или несжатый
-				//io.Copy(os.Stdout, response.Body)
-			}
+			} //else {
+			//TODO сжатый другим методом или несжатый
+			//io.Copy(os.Stdout, response.Body)
+			//}
 			//response.Body.Close()
 		} else {
 			errors = append(errors, err)
