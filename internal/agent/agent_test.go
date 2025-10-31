@@ -3,6 +3,9 @@ package agent
 //создано roo code + glm 4.6
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
 )
 
@@ -87,7 +91,7 @@ func (m *MockRepository) SetError(key string, shouldError bool) {
 }
 
 func TestAgent_Send(t *testing.T) {
-	// Create a test server to handle the HTTP requests
+	// Create a test server to handle the HTTP requests with JSON and gzip support
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the request path matches the expected pattern
 		if r.Method != http.MethodPost {
@@ -96,9 +100,67 @@ func TestAgent_Send(t *testing.T) {
 			return
 		}
 
-		// Return success response
+		// Check Content-Type header
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Check Content-Encoding header
+		if r.Header.Get("Content-Encoding") != "gzip" {
+			t.Errorf("Expected Content-Encoding gzip, got %s", r.Header.Get("Content-Encoding"))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Read and decompress the request body
+		reader, err := gzip.NewReader(r.Body)
+		if err != nil {
+			t.Errorf("Failed to create gzip reader: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer reader.Close()
+
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(reader)
+		if err != nil {
+			t.Errorf("Failed to read decompressed data: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Parse the JSON to verify it's a valid metric
+		var metric models.Metrics
+		if err := json.Unmarshal(buf.Bytes(), &metric); err != nil {
+			t.Errorf("Failed to unmarshal JSON: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Validate metric structure
+		if metric.ID == "" {
+			t.Error("Metric ID is empty")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if metric.MType != models.Gauge && metric.MType != models.Counter {
+			t.Errorf("Invalid metric type: %s", metric.MType)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Return success response with gzip compression
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "Metric updated successfully")
+
+		gzWriter := gzip.NewWriter(w)
+		defer gzWriter.Close()
+		response := `{"status":"success"}`
+		gzWriter.Write([]byte(response))
 	}))
 	defer server.Close()
 

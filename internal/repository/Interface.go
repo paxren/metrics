@@ -4,7 +4,7 @@ import "errors"
 
 var (
 	ErrGaugeNotFound   = errors.New("метрика gauge не найдена")
-	ErrCounterNotFound = errors.New("метрика gauge не найдена")
+	ErrCounterNotFound = errors.New("метрика counter не найдена")
 )
 
 type Repository interface {
