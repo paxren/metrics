@@ -509,7 +509,7 @@ func TestGzipMiddleware(t *testing.T) {
 			} else {
 				// Проверяем, что ответ не сжат (в текущей реализации это означает,
 				// что Content-Encoding не установлен или needCompress=false)
-				contentEncoding := rr.Header().Get("Content-Encoding")
+				//contentEncoding := rr.Header().Get("Content-Encoding")
 				bodyStr := rr.Body.String()
 
 				// В текущей реализации, даже когда needCompress=false, gzip writer закрывается
@@ -520,10 +520,10 @@ func TestGzipMiddleware(t *testing.T) {
 				}
 
 				// Также проверяем, что Content-Encoding не установлен, когда сжатие не ожидается
-				if contentEncoding == "gzip" {
-					// Это может произойти, если клиент поддерживает gzip, но контент не должен сжиматься
-					// В текущей реализации это ожидаемое поведение
-				}
+				//if contentEncoding == "gzip" {
+				// Это может произойти, если клиент поддерживает gzip, но контент не должен сжиматься
+				// В текущей реализации это ожидаемое поведение
+				//}
 			}
 
 			// Проверяем декомпрессию запроса
