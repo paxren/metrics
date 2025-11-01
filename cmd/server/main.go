@@ -141,7 +141,7 @@ func main() {
 	//работа с файлами
 	savedStorage := repository.MakeSavedRepo(storage, fileStoragePath, storeInterval)
 	if restore {
-		err = savedStorage.Load(fileStoragePath)
+		_ = savedStorage.Load(fileStoragePath)
 		// if err != nil {
 		// 	panic(err)
 		// }
