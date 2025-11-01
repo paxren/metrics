@@ -18,18 +18,18 @@ import (
 
 var (
 	hostAdress             = config.NewHostAddress()
-	storeInterval   int64  = 300
+	storeInterval   uint64 = 300
 	fileStoragePath string = "save_file"
 	restore         bool   = false
 
 	paramHostAdress             = config.NewHostAddress()
-	paramStoreInterval   int64  = 300
+	paramStoreInterval   uint64 = 300
 	paramFileStoragePath string = "save_file"
 	paramRestore         bool   = false
 )
 
 type ConfigSI struct {
-	Val int64 `env:"STORE_INTERVAL,required"`
+	Val uint64 `env:"STORE_INTERVAL,required"`
 }
 
 type ConfigFSP struct {
@@ -43,7 +43,7 @@ type ConfigRe struct {
 func init() {
 	// используем init-функцию
 	flag.Var(paramHostAdress, "a", "Net address host:port")
-	flag.Int64Var(&paramStoreInterval, "i", 300, "storeInterval")
+	flag.Uint64Var(&paramStoreInterval, "i", 300, "storeInterval")
 	flag.StringVar(&paramFileStoragePath, "f", "save_file", "fileStoragePath")
 	flag.BoolVar(&paramRestore, "r", false, "paramRestore")
 }
