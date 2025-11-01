@@ -142,9 +142,9 @@ func main() {
 	savedStorage := repository.MakeSavedRepo(storage, fileStoragePath, storeInterval)
 	if restore {
 		err = savedStorage.Load(fileStoragePath)
-		if err != nil {
-			panic(err)
-		}
+		// if err != nil {
+		// 	panic(err)
+		// }
 	}
 	//запуск обработчиков
 	handlerv := handler.NewHandler(savedStorage)
