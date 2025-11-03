@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -12,7 +11,7 @@ type HostAddressParseError struct {
 }
 
 func (e HostAddressParseError) Error() string {
-	return fmt.Sprintf("%s", e.message)
+	return e.message
 }
 
 type HostAddress struct {
