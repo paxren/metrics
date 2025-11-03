@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"encoding/json"
+
+	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -176,8 +180,135 @@ func (h Handler) GetMain(res http.ResponseWriter, req *http.Request) {
 
 	var form = formStart + formMetrics + formEnd
 
+	res.Header().Set("Content-Type", "text/html ; charset=utf-8")
+	//res.Header().Set("Content-Type", "")
+
+	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(form))
+
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
 	fmt.Println(req.URL)
+}
+
+func (h Handler) UpdateJSON(res http.ResponseWriter, req *http.Request) {
+
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if req.Header.Get("Content-Type") != "application/json" {
+		res.WriteHeader(http.StatusResetContent)
+		return
+	}
+
+	var metric models.Metrics
+
+	var buf bytes.Buffer
+	// читаем тело запроса
+	_, err := buf.ReadFrom(req.Body)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// десериализуем JSON в Metric
+	if err = json.Unmarshal(buf.Bytes(), &metric); err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	switch metric.MType {
+	case "counter":
+		if metric.Delta == nil {
+			http.Error(res, fmt.Sprintf("Нет значения метрики: %v \r\n", metric), http.StatusBadRequest)
+			return
+		}
+
+		err := h.repo.UpdateCounter(metric.ID, *metric.Delta)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+	case "gauge":
+		if metric.Value == nil {
+			http.Error(res, fmt.Sprintf("Нет значения метрики: %v \r\n", metric), http.StatusBadRequest)
+			return
+		}
+
+		err := h.repo.UpdateGauge(metric.ID, *metric.Value)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	default:
+		http.Error(res, fmt.Sprintf("Неизвестное тип метрики: %v \r\n", metric.MType), http.StatusBadRequest)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+}
+
+func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
+	//Content-Type application/json
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if req.Header.Get("Content-Type") != "application/json" {
+		res.WriteHeader(http.StatusResetContent)
+		return
+	}
+
+	var metric models.Metrics
+	var metricOut models.Metrics
+	var buf bytes.Buffer
+	// читаем тело запроса
+	_, err := buf.ReadFrom(req.Body)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// десериализуем JSON в Metric
+	if err = json.Unmarshal(buf.Bytes(), &metric); err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	switch metric.MType {
+	case "counter":
+		v, err := h.repo.GetCounter(metric.ID)
+		if err != nil {
+			http.Error(res, fmt.Sprintf("Неизвестное имя метрики: %v \r\n", metric.ID), http.StatusNotFound)
+			return
+		}
+
+		metricOut.Delta = &v
+	case "gauge":
+		v, err := h.repo.GetGauge(metric.ID)
+		if err != nil {
+			http.Error(res, fmt.Sprintf("Неизвестное имя метрики: %v \r\n", metric.ID), http.StatusNotFound)
+			return
+		}
+
+		metricOut.Value = &v
+	default:
+		http.Error(res, fmt.Sprintf("Неизвестное тип метрики: %v \r\n", metric.MType), http.StatusNotFound)
+		return
+	}
+
+	metricOut.MType = metric.MType
+	metricOut.ID = metric.ID
+
+	resp, err := json.Marshal(metricOut)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(http.StatusOK)
+	res.Write(resp)
 }

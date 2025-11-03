@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -11,24 +12,76 @@ import (
 	"github.com/paxren/metrics/internal/repository"
 
 	"math/rand"
+
+	"github.com/caarlos0/env/v11"
 )
 
 var (
 	hostAdress           = config.NewHostAddress()
 	reportInterval int64 = 10
 	pollInterval   int64 = 2
+
+	paramHostAdress           = config.NewHostAddress()
+	paramReportInterval int64 = 10
+	paramPollInterval   int64 = 2
 )
+
+type ConfigRI struct {
+	Val int64 `env:"REPORT_INTERVAL,required"`
+}
+
+type ConfigPI struct {
+	Val int64 `env:"POLL_INTERVAL,required"`
+}
 
 func init() {
 	// используем init-функцию
-	flag.Var(hostAdress, "a", "Net address host:port")
-	flag.Int64Var(&reportInterval, "r", 10, "reportInterval")
-	flag.Int64Var(&pollInterval, "p", 2, "pollInterval")
+	flag.Var(paramHostAdress, "a", "Net address host:port")
+	flag.Int64Var(&paramReportInterval, "r", 10, "reportInterval")
+	flag.Int64Var(&paramPollInterval, "p", 2, "pollInterval")
 }
 
 func main() {
 
 	flag.Parse()
+	//========== ADDRESS
+	adr := os.Getenv("ADDRESS")
+
+	err1 := hostAdress.Set(adr)
+	if err1 != nil {
+		hostAdress = paramHostAdress
+	}
+
+	fmt.Println(hostAdress)
+
+	//========= INTERVASLS
+
+	var ri ConfigRI
+	err2 := env.Parse(&ri)
+	fmt.Printf("ri=%v  err=%v \n", ri, err2)
+	if err2 != nil {
+		//fmt.Printf("Error parsing REPORT_INTERVAL1: %v, using default value\n", err2)
+		reportInterval = paramReportInterval
+	} else {
+		//fmt.Printf("Successfully parsed REPORT_INTERVAL1: %d\n", ri.Val)
+		reportInterval = ri.Val
+	}
+
+	// Убираем os.Exit(1), чтобы программа продолжала выполнение
+	// os.Exit(1)
+
+	var pi ConfigPI
+	err3 := env.Parse(&pi)
+	//fmt.Printf("POLL_INTERVAL from os.Getenv: %s\n", os.Getenv("POLL_INTERVAL"))
+	fmt.Printf("pi=%v  err=%v \n", pi, err3)
+	if err3 != nil {
+		//fmt.Printf("Error parsing POLL_INTERVAL: %v, using default value\n", err3)
+		pollInterval = paramPollInterval
+	} else {
+		//fmt.Printf("Successfully parsed POLL_INTERVAL: %d\n", pi.Val)
+		pollInterval = pi.Val
+	}
+	//======== START
 
 	fmt.Printf("report interval: %d \r\n poll interval: %d \r\n", reportInterval, pollInterval)
 
@@ -53,11 +106,11 @@ func main() {
 			PollCount++
 
 			agent.Repo.UpdateCounter("PollCount", PollCount)
-			//test, _ = memStorage.GetCounter("PollCount")
+			//test1, _ = agent.Repo.GetCounter("PollCount")
 			randFloat = rand.Float64()
 			agent.Repo.UpdateGauge("RandomValue", randFloat)
-			//fmt.Printf("memstorage: %v \r\n", memStorage)
-			//fmt.Printf("memstorage: %v \r\n", test)
+			//fmt.Printf("memstorage: %v \r\n", agent.Repo)
+			//fmt.Printf("memstorage: %v \r\n", test1)
 			agent.Add(&memStats)
 		case <-reportTicker.C:
 			fmt.Println("отправляю данные")

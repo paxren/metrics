@@ -2,14 +2,19 @@ package agent
 
 import (
 	"runtime"
+	"strings"
 
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
 
 	"io"
 	"net/http"
 	"os"
-	"strconv"
+
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 )
 
 type Agent struct {
@@ -24,6 +29,77 @@ func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 	}
 }
 
+func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []error) []error {
+	metricJSON, err := json.Marshal(metricOut)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+
+	var gzipped bytes.Buffer
+	// создаём переменную w — в неё будут записываться входящие данные,
+	// которые будут сжиматься и сохраняться в bytes.Buffer
+	w := gzip.NewWriter(&gzipped)
+
+	_, err = w.Write(metricJSON)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+	err = w.Close()
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+
+	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", &gzipped)
+	if err != nil {
+		errors = append(errors, err)
+	}
+	request.Header.Set(`Content-Type`, `application/json`)
+	request.Header.Set(`Accept-Encoding`, `gzip`)
+	request.Header.Set(`Content-Encoding`, `gzip`)
+
+	response, err := client.Do(request)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+	defer response.Body.Close()
+
+	//response.Header.Get("Content-Encoding")
+	contentEncoding := response.Header.Get("Content-Encoding")
+	receiveGzip := strings.Contains(contentEncoding, "gzip")
+
+	if receiveGzip {
+
+		// переменная r будет читать входящие данные и распаковывать их
+		r, err := gzip.NewReader(response.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+		defer r.Close()
+
+		var b bytes.Buffer
+		// в переменную b записываются распакованные данные
+		_, err = b.ReadFrom(r)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+
+		io.Copy(os.Stdout, &b) // вывод ответа в консоль
+		//fmt.Println(1)
+	} //else {
+	//TODO сжатый другим методом или несжатый
+	//io.Copy(os.Stdout, response.Body)
+	//}
+	//response.Body.Close()
+
+	return errors
+}
+
 func (a Agent) Send() []error {
 
 	errors := make([]error, 0)
@@ -32,23 +108,17 @@ func (a Agent) Send() []error {
 
 	gaugesKeys := a.Repo.GetGaugesKeys()
 
+	var metricOut models.Metrics
 	for _, vkey := range gaugesKeys {
 
 		vv, err := a.Repo.GetGauge(vkey)
 
 		if err == nil {
 
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update/gauge/"+vkey+"/"+strconv.FormatFloat(vv, 'f', 2, 64), nil)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			request.Header.Set(`Content-Type`, `text/plain`)
-			response, err := client.Do(request)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
-			response.Body.Close()
+			metricOut.ID = vkey
+			metricOut.Value = &vv
+			metricOut.MType = models.Gauge
+			errors = a.work1(&metricOut, &client, errors)
 		} else {
 			errors = append(errors, err)
 		}
@@ -61,17 +131,10 @@ func (a Agent) Send() []error {
 		vv, err := a.Repo.GetCounter(vkey)
 
 		if err == nil {
-			request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update/counter/"+vkey+"/"+strconv.FormatInt(vv, 10), nil)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			request.Header.Set(`Content-Type`, `text/plain`)
-			response, err := client.Do(request)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			io.Copy(os.Stdout, response.Body) // вывод ответа в консоль
-			response.Body.Close()
+			metricOut.ID = vkey
+			metricOut.Delta = &vv
+			metricOut.MType = models.Counter
+			errors = a.work1(&metricOut, &client, errors)
 		} else {
 			errors = append(errors, err)
 		}
