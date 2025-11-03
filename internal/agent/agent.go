@@ -96,6 +96,8 @@ func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []er
 	//io.Copy(os.Stdout, response.Body)
 	//}
 	//response.Body.Close()
+
+	return errors
 }
 
 func (a Agent) Send() []error {
