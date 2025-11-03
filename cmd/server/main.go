@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 
@@ -51,7 +50,7 @@ func main() {
 		"serverConfig", serverConfig,
 	)
 
-	os.Exit(1)
+	//os.Exit(1)
 	// PREPARE STORAGES
 	storage := repository.MakeMemStorage()
 	//работа с файлами
