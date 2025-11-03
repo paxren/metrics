@@ -53,7 +53,7 @@ func init() {
 
 func main() {
 
-	//обработка сигтерм
+	//обработка сигтерм, по статье https://habr.com/ru/articles/908344/
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
