@@ -30,7 +30,9 @@ type ServerConfig struct {
 
 func NewServerConfig() *ServerConfig {
 
-	return &ServerConfig{}
+	return &ServerConfig{
+		paramAddress: *NewHostAddress(),
+	}
 
 }
 
@@ -40,9 +42,11 @@ func (se *ServerConfig) Init() {
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
 	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
 	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
+	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
 	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
 	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
 	// fmt.Printf("Restore = %v\n", se.Restore)
+	// fmt.Printf("Adress = %v\n", se.Address)
 	flag.Var(&se.paramAddress, "a", "Net address host:port")
 	flag.Uint64Var(&se.paramStoreInterval, "i", 300, "storeInterval")
 	flag.StringVar(&se.paramFileStoragePath, "f", "save_file", "fileStoragePath")
@@ -52,10 +56,11 @@ func (se *ServerConfig) Init() {
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
 	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
 	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
+	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
 	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
 	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
 	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("finish init:\n\n")
+	// fmt.Printf("Adress = %v\n", se.Address)
 }
 
 func (se *ServerConfig) Parse() {
@@ -64,9 +69,11 @@ func (se *ServerConfig) Parse() {
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
 	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
 	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
+	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
 	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
 	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
 	// fmt.Printf("Restore = %v\n", se.Restore)
+	// fmt.Printf("Adress = %v\n", se.Address)
 
 	err := env.ParseWithOptions(&se.envs, env.Options{
 		FuncMap: map[reflect.Type]env.ParserFunc{
@@ -125,9 +132,11 @@ func (se *ServerConfig) Parse() {
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
 	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
 	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
+	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
 	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
 	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
 	// fmt.Printf("Restore = %v\n", se.Restore)
+	// fmt.Printf("Adress = %v\n", se.Address)
 
 	if _, ok := problemVars["STORE_INTERVAL"]; !ok {
 		se.StoreInterval = se.envs.STORE_INTERVAL
@@ -156,7 +165,9 @@ func (se *ServerConfig) Parse() {
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
 	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
 	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
+	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
 	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
 	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
 	// fmt.Printf("Restore = %v\n", se.Restore)
+	// fmt.Printf("Adress = %v\n", se.Address)
 }
