@@ -9,10 +9,10 @@ import (
 )
 
 type ServerConfigEnv struct {
-	STORE_INTERVAL    uint64      `env:"STORE_INTERVAL,notEmpty"`
-	FILE_STORAGE_PATH string      `env:"FILE_STORAGE_PATH,notEmpty"`
-	RESTORE           bool        `env:"RESTORE,notEmpty"`
-	ADDRESS           HostAddress `env:"ADDRESS,notEmpty"`
+	StoreInterval   uint64      `env:"STORE_INTERVAL,notEmpty"`
+	FileStoragePath string      `env:"FILE_STORAGE_PATH,notEmpty"`
+	Restore         bool        `env:"RESTORE,notEmpty"`
+	Address         HostAddress `env:"ADDRESS,notEmpty"`
 }
 
 type ServerConfig struct {
@@ -138,26 +138,34 @@ func (se *ServerConfig) Parse() {
 	// fmt.Printf("Restore = %v\n", se.Restore)
 	// fmt.Printf("Adress = %v\n", se.Address)
 
-	if _, ok := problemVars["STORE_INTERVAL"]; !ok {
-		se.StoreInterval = se.envs.STORE_INTERVAL
+	_, ok1 := problemVars["STORE_INTERVAL"]
+	_, ok2 := problemVars["StoreInterval"]
+	if !ok1 && !ok2 {
+		se.StoreInterval = se.envs.StoreInterval
 	} else {
 		se.StoreInterval = se.paramStoreInterval
 	}
 
-	if _, ok := problemVars["FILE_STORAGE_PATH"]; !ok {
-		se.FileStoragePath = se.envs.FILE_STORAGE_PATH
+	_, ok1 = problemVars["FILE_STORAGE_PATH"]
+	_, ok2 = problemVars["FileStoragePath"]
+	if !ok1 && !ok2 {
+		se.FileStoragePath = se.envs.FileStoragePath
 	} else {
 		se.FileStoragePath = se.paramFileStoragePath
 	}
 
-	if _, ok := problemVars["RESTORE"]; !ok {
-		se.Restore = se.envs.RESTORE
+	_, ok1 = problemVars["RESTORE"]
+	_, ok2 = problemVars["Restore"]
+	if !ok1 && !ok2 {
+		se.Restore = se.envs.Restore
 	} else {
 		se.Restore = se.paramRestore
 	}
 
-	if _, ok := problemVars["ADDRESS"]; !ok {
-		se.Address = se.envs.ADDRESS
+	_, ok1 = problemVars["ADDRESS"]
+	_, ok2 = problemVars["Address"]
+	if !ok1 && !ok2 {
+		se.Address = se.envs.Address
 	} else {
 		se.Address = se.paramAddress
 	}
