@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/handler"
@@ -49,6 +52,10 @@ func init() {
 }
 
 func main() {
+
+	//обработка сигтерм
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	//init logger
 	logger, err := zap.NewDevelopment()
@@ -140,6 +147,7 @@ func main() {
 	storage := repository.MakeMemStorage()
 	//работа с файлами
 	savedStorage := repository.MakeSavedRepo(storage, fileStoragePath, storeInterval)
+
 	if restore {
 		_ = savedStorage.Load(fileStoragePath)
 		// if err != nil {
@@ -160,13 +168,27 @@ func main() {
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
 
-	err = http.ListenAndServe(hostAdress.String(), r)
-	if err != nil {
-		sugar.Infow(
-			"Failed to serve listener",
-			"error", err,
-		)
-		panic(err)
+	server := &http.Server{
+		Addr:    hostAdress.String(),
+		Handler: r,
 	}
+
+	go func() {
+		err = server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			sugar.Infow(
+				"Failed to serve listener",
+				"error", err,
+			)
+			panic(err)
+		}
+
+	}()
+
+	//обработка сигтерм TODO добработать или переработать после понимания контекста и др
+	<-rootCtx.Done()
+	stop()
+	server.Shutdown(context.Background())
+	savedStorage.Save()
 
 }
