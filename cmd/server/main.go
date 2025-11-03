@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,43 +11,16 @@ import (
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
 
-	"github.com/caarlos0/env/v11"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
-//var hostAdress = config.NewHostAddress()
-
 var (
-	hostAdress             = config.NewHostAddress()
-	storeInterval   uint64 = 300
-	fileStoragePath string = "save_file"
-	restore         bool   = false
-
-	paramHostAdress             = config.NewHostAddress()
-	paramStoreInterval   uint64 = 300
-	paramFileStoragePath string = "save_file"
-	paramRestore         bool   = false
+	serverConfig = config.NewServerConfig()
 )
 
-type ConfigSI struct {
-	Val uint64 `env:"STORE_INTERVAL,required"`
-}
-
-type ConfigFSP struct {
-	Val string `env:"FILE_STORAGE_PATH,required"`
-}
-
-type ConfigRe struct {
-	Val bool `env:"RESTORE,required"`
-}
-
 func init() {
-	// используем init-функцию
-	flag.Var(paramHostAdress, "a", "Net address host:port")
-	flag.Uint64Var(&paramStoreInterval, "i", 300, "storeInterval")
-	flag.StringVar(&paramFileStoragePath, "f", "save_file", "fileStoragePath")
-	flag.BoolVar(&paramRestore, "r", false, "paramRestore")
+	serverConfig.Init()
 }
 
 func main() {
@@ -69,87 +41,24 @@ func main() {
 	sugar := logger.Sugar()
 
 	// init params & envs
-	flag.Parse()
-
-	adr := os.Getenv("ADDRESS")
-
-	err = hostAdress.Set(adr)
-
-	if err != nil {
-		sugar.Infow(
-			"Failed to set address from env",
-			"error", err,
-			"adr", adr,
-		)
-		hostAdress = paramHostAdress
-	}
 	sugar.Infow(
-		"host adress initialise",
-		"hostAdressParams", paramHostAdress,
-		"hostAdressEnv", adr,
-		"hostAdressInit", hostAdress,
+		"serverConfig before",
+		"serverConfig", serverConfig,
+	)
+	serverConfig.Parse()
+	sugar.Infow(
+		"serverConfig parse",
+		"serverConfig", serverConfig,
 	)
 
-	var si ConfigSI
-	err = env.Parse(&si)
-	if err != nil {
-		sugar.Infow(
-			"Failed to set store interval from env",
-			"error", err,
-		)
-		storeInterval = paramStoreInterval
-	} else {
-		storeInterval = si.Val
-	}
-	sugar.Infow(
-		"store interval  initialise",
-		"storeIntervalParams", paramStoreInterval,
-		"storeIntervalEnv", si.Val,
-		"storeIntervalInit", storeInterval,
-	)
-
-	var fsp ConfigFSP
-	err = env.Parse(&fsp)
-	if err != nil {
-		sugar.Infow(
-			"Failed to set file storage path from env",
-			"error", err,
-		)
-		fileStoragePath = paramFileStoragePath
-	} else {
-		fileStoragePath = fsp.Val
-	}
-	sugar.Infow(
-		"file store path initialise",
-		"fileStoragePathParams", paramFileStoragePath,
-		"fileStoragePathEnv", fsp.Val,
-		"fileStoragePathInit", fileStoragePath,
-	)
-
-	var re ConfigRe
-	err = env.Parse(&re)
-	if err != nil {
-		sugar.Infow(
-			"Failed to set restore from env",
-			"error", err,
-		)
-		restore = paramRestore
-	} else {
-		restore = re.Val
-	}
-	sugar.Infow(
-		"restore initialise",
-		"restoreParams", paramRestore,
-		"restoreEnv", re.Val,
-		"restoreInit", restore,
-	)
+	os.Exit(1)
 	// PREPARE STORAGES
 	storage := repository.MakeMemStorage()
 	//работа с файлами
-	savedStorage := repository.MakeSavedRepo(storage, fileStoragePath, storeInterval)
+	savedStorage := repository.MakeSavedRepo(storage, serverConfig.FileStoragePath, serverConfig.StoreInterval)
 
-	if restore {
-		_ = savedStorage.Load(fileStoragePath)
+	if serverConfig.Restore {
+		_ = savedStorage.Load(serverConfig.FileStoragePath)
 		// if err != nil {
 		// 	panic(err)
 		// }
@@ -169,7 +78,7 @@ func main() {
 	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
 
 	server := &http.Server{
-		Addr:    hostAdress.String(),
+		Addr:    serverConfig.Address.String(),
 		Handler: r,
 	}
 

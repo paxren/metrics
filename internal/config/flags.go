@@ -1,11 +1,19 @@
 package config
 
 import (
-	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 )
+
+type HostAddressParseError struct {
+	message string
+}
+
+func (e HostAddressParseError) Error() string {
+	return fmt.Sprintf("%s", e.message)
+}
 
 type HostAddress struct {
 	Host string
@@ -26,17 +34,17 @@ func (a HostAddress) String() string {
 func (a *HostAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
-		return errors.New("need address in a form host:port")
+		return HostAddressParseError{message: "need address in a form host:port"}
 	}
 	port, err := strconv.Atoi(hp[1])
 	if err != nil {
-		return err
+		return HostAddressParseError{message: err.Error()}
 	}
 
 	if hp[0] != "localhost" {
 		ip := net.ParseIP(hp[0])
 		if ip == nil {
-			return errors.New("need host in ip form or localhost string")
+			return HostAddressParseError{message: "need host in ip form or localhost string"}
 		}
 	}
 	a.Host = hp[0]
