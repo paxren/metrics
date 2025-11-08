@@ -28,11 +28,17 @@ type Handler struct {
 	dbConnectionString string
 }
 
-func NewHandler(r repository.Repository, dbCon string) *Handler {
+func NewHandler(r repository.Repository) *Handler {
 	return &Handler{
-		repo:               r,
-		dbConnectionString: dbCon,
+		repo: r,
 	}
+}
+
+func (h *Handler) SetDBString(str string) {
+	// fmt.Printf("перед присваиванием h.dbConnectionString %s \n", h.dbConnectionString)
+	// fmt.Printf("перед присваиванием str %s\n", str)
+	h.dbConnectionString = str
+	// fmt.Printf("после присваивания h.dbConnectionString %s \n", h.dbConnectionString)
 }
 
 func (h Handler) UpdateMetric(res http.ResponseWriter, req *http.Request) {
@@ -326,7 +332,7 @@ func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 func (h Handler) PingDB(res http.ResponseWriter, req *http.Request) {
 
 	db, err := sql.Open("pgx", h.dbConnectionString)
-	// fmt.Println(h.dbConnectionString)
+	// fmt.Printf("из пинга h.dbConnectionString %s \n", h.dbConnectionString)
 	// fmt.Println(err)
 	if err != nil {
 		http.Error(res, fmt.Sprintf("Ошибка: %v \r\n", err), http.StatusInternalServerError)

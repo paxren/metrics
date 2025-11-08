@@ -55,7 +55,10 @@ func main() {
 	storage := repository.MakeMemStorage()
 	//работа с файлами
 	savedStorage := repository.MakeSavedRepo(storage, serverConfig.FileStoragePath, serverConfig.StoreInterval)
-
+	sugar.Infow(
+		"savedStorage init",
+		"savedStorage obj", savedStorage,
+	)
 	if serverConfig.Restore {
 		_ = savedStorage.Load(serverConfig.FileStoragePath)
 		// if err != nil {
@@ -63,7 +66,16 @@ func main() {
 		// }
 	}
 	//запуск обработчиков
-	handlerv := handler.NewHandler(savedStorage, serverConfig.DatabaseDSN)
+	handlerv := handler.NewHandler(savedStorage)
+	sugar.Infow(
+		"handler init",
+		"handler obj", handlerv,
+	)
+	handlerv.SetDBString(serverConfig.DatabaseDSN)
+	sugar.Infow(
+		"handler set db",
+		"handler obj", handlerv,
+	)
 	//fmt.Printf("host param: %s", hostAdress.String())
 
 	r := chi.NewRouter()
