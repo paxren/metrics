@@ -2,10 +2,12 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"encoding/json"
 
@@ -13,15 +15,23 @@ import (
 	"github.com/paxren/metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
+
+	"database/sql"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type Handler struct {
 	repo repository.Repository
+
+	//todo переделать!!!
+	dbConnectionString string
 }
 
-func NewHandler(r repository.Repository) *Handler {
+func NewHandler(r repository.Repository, dbCon string) *Handler {
 	return &Handler{
-		repo: r,
+		repo:               r,
+		dbConnectionString: dbCon,
 	}
 }
 
@@ -311,4 +321,26 @@ func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(http.StatusOK)
 	res.Write(resp)
+}
+
+func (h Handler) PingDB(res http.ResponseWriter, req *http.Request) {
+
+	db, err := sql.Open("pgx", h.dbConnectionString)
+	// fmt.Println(h.dbConnectionString)
+	// fmt.Println(err)
+	if err != nil {
+		http.Error(res, fmt.Sprintf("Ошибка: %v \r\n", err), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		http.Error(res, fmt.Sprintf("Ошибка: %v \r\n", err), http.StatusInternalServerError)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+
 }

@@ -63,7 +63,7 @@ func main() {
 		// }
 	}
 	//запуск обработчиков
-	handlerv := handler.NewHandler(savedStorage)
+	handlerv := handler.NewHandler(savedStorage, serverConfig.DatabaseDSN)
 	//fmt.Printf("host param: %s", hostAdress.String())
 
 	r := chi.NewRouter()
@@ -74,6 +74,8 @@ func main() {
 	r.Post(`/value`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON)))
 	r.Post(`/update`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON)))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
+	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
+	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
 
 	server := &http.Server{
