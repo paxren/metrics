@@ -45,7 +45,7 @@ func MakePostgresStorage(con string) (*PostgresStorage, error) {
 
 	fmt.Println("3")
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://../../migrations",
+		"file://./migrations",
 		"postgres", driver)
 	if err != nil {
 		fmt.Printf("migration err! err=%v", err)
