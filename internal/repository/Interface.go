@@ -15,3 +15,7 @@ type Repository interface {
 	GetGaugesKeys() []string
 	GetCountersKeys() []string
 }
+
+type Pinger interface {
+	Ping() error
+}
