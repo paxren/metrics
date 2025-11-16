@@ -29,6 +29,117 @@ func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 	}
 }
 
+func (a Agent) SendAll() []error {
+
+	errors := make([]error, 0)
+
+	client := http.Client{}
+
+	metrics := make([]models.Metrics, 0, 10)
+
+	gaugesKeys := a.Repo.GetGaugesKeys()
+	for _, vkey := range gaugesKeys {
+		vv, err := a.Repo.GetGauge(vkey)
+
+		if err == nil {
+			metrics = append(metrics, models.Metrics{
+				ID:    vkey,
+				MType: models.Gauge,
+				Value: &vv,
+			})
+		} else {
+			errors = append(errors, err)
+		}
+
+	}
+
+	countersKeys := a.Repo.GetCountersKeys()
+	for _, vkey := range countersKeys {
+
+		vv, err := a.Repo.GetCounter(vkey)
+
+		if err == nil {
+			metrics = append(metrics, models.Metrics{
+				ID:    vkey,
+				MType: models.Counter,
+				Delta: &vv,
+			})
+		} else {
+			errors = append(errors, err)
+		}
+	}
+
+	metricJSON, err := json.Marshal(metrics)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+
+	var gzipped bytes.Buffer
+	// создаём переменную w — в неё будут записываться входящие данные,
+	// которые будут сжиматься и сохраняться в bytes.Buffer
+	w := gzip.NewWriter(&gzipped)
+
+	_, err = w.Write(metricJSON)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+	err = w.Close()
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+
+	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/updates", &gzipped)
+	if err != nil {
+		errors = append(errors, err)
+	}
+	request.Header.Set(`Content-Type`, `application/json`)
+	request.Header.Set(`Accept-Encoding`, `gzip`)
+	request.Header.Set(`Content-Encoding`, `gzip`)
+
+	response, err := client.Do(request)
+	if err != nil {
+		errors = append(errors, err)
+		return errors
+	}
+	defer response.Body.Close()
+
+	//response.Header.Get("Content-Encoding")
+	contentEncoding := response.Header.Get("Content-Encoding")
+	receiveGzip := strings.Contains(contentEncoding, "gzip")
+
+	if receiveGzip {
+
+		// переменная r будет читать входящие данные и распаковывать их
+		r, err := gzip.NewReader(response.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+		defer r.Close()
+
+		var b bytes.Buffer
+		// в переменную b записываются распакованные данные
+		_, err = b.ReadFrom(r)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+
+		io.Copy(os.Stdout, &b) // вывод ответа в консоль
+		//fmt.Println(1)
+	} //else {
+	//TODO сжатый другим методом или несжатый
+	//io.Copy(os.Stdout, response.Body)
+	//}
+	//response.Body.Close()
+
+	return errors
+
+}
+
 func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []error) []error {
 	metricJSON, err := json.Marshal(metricOut)
 	if err != nil {

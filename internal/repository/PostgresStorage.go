@@ -204,81 +204,111 @@ func (ps *PostgresStorage) Ping() error {
 	return nil
 }
 
-func testSQL() {
-	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-		`localhost`, `dbtest1`, `dbtest1`, `dbtest1`)
+func (ps *PostgresStorage) MassUpdate(metrics []models.Metrics) error {
 
-	fmt.Println("1")
-	db, err := sql.Open("pgx", ps)
+	tx, err := ps.db.Begin()
 	if err != nil {
-		fmt.Printf("err=%v", err)
-		return
-	}
-	defer db.Close() //TODO вынести в конец программы
-
-	fmt.Println("2")
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		fmt.Printf("driver err! err=%v", err)
-		return
+		return err
 	}
 
-	fmt.Println("3")
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://../../migrations",
-		"postgres", driver)
-	if err != nil {
-		fmt.Printf("migration err! err=%v", err)
-		return
+	for _, metric := range metrics {
+		// все изменения записываются в транзакцию
+		_, err := tx.ExecContext(context.Background(), `
+			INSERT INTO metrics (id, mtype, delta, value, hash) 
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (id) DO UPDATE SET 
+				mtype = EXCLUDED.mtype,	
+				delta = EXCLUDED.delta,
+				value = EXCLUDED.value,
+				hash = EXCLUDED.hash
+			`,
+			metric.ID, metric.MType, metric.Delta, metric.Value, "")
+		if err != nil {
+			// если ошибка, то откатываем изменения
+			tx.Rollback()
+			return err
+		}
 	}
-	fmt.Println("4")
-	m.Up()
-
-	fmt.Println("5")
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	if err = db.PingContext(ctx); err != nil {
-		fmt.Printf("err=%v", err)
-		return
-	}
-
-	var ui int64 = 200
-	metric := models.Metrics{
-		ID:    "test1",
-		MType: "counter",
-		Delta: &ui,
-	}
-
-	fmt.Println("6")
-	res, err := db.ExecContext(context.Background(), `
-    INSERT INTO metrics (id, mtype, delta, value, hash) 
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (id) DO UPDATE SET 
-        delta = EXCLUDED.delta,
-        value = EXCLUDED.value,
-        hash = EXCLUDED.hash
-	`,
-		metric.ID, metric.MType, metric.Delta, metric.Value, metric.Hash)
-
-	fmt.Println(res)
-
-	if err != nil {
-		fmt.Printf("isert err! err=%v", err)
-		return
-	}
-
-	row := db.QueryRowContext(context.Background(),
-		"SELECT delta, value, mtype FROM metrics WHERE id = $1", metric.ID)
-	var (
-		mtype string
-		delta sql.NullInt64
-		value sql.NullFloat64
-	)
-	// порядок переменных должен соответствовать порядку колонок в запросе
-	err = row.Scan(&delta, &value, &mtype)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%v | %v | %s \r\n", delta, value, mtype)
+	// завершаем транзакцию
+	return tx.Commit()
 
 }
+
+// func testSQL() {
+// 	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
+// 		`localhost`, `dbtest1`, `dbtest1`, `dbtest1`)
+
+// 	fmt.Println("1")
+// 	db, err := sql.Open("pgx", ps)
+// 	if err != nil {
+// 		fmt.Printf("err=%v", err)
+// 		return
+// 	}
+// 	defer db.Close() //TODO вынести в конец программы
+
+// 	fmt.Println("2")
+// 	driver, err := postgres.WithInstance(db, &postgres.Config{})
+// 	if err != nil {
+// 		fmt.Printf("driver err! err=%v", err)
+// 		return
+// 	}
+
+// 	fmt.Println("3")
+// 	m, err := migrate.NewWithDatabaseInstance(
+// 		"file://../../migrations",
+// 		"postgres", driver)
+// 	if err != nil {
+// 		fmt.Printf("migration err! err=%v", err)
+// 		return
+// 	}
+// 	fmt.Println("4")
+// 	m.Up()
+
+// 	fmt.Println("5")
+// 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+// 	defer cancel()
+// 	if err = db.PingContext(ctx); err != nil {
+// 		fmt.Printf("err=%v", err)
+// 		return
+// 	}
+
+// 	var ui int64 = 200
+// 	metric := models.Metrics{
+// 		ID:    "test1",
+// 		MType: "counter",
+// 		Delta: &ui,
+// 	}
+
+// 	fmt.Println("6")
+// 	res, err := db.ExecContext(context.Background(), `
+//     INSERT INTO metrics (id, mtype, delta, value, hash)
+//     VALUES ($1, $2, $3, $4, $5)
+//     ON CONFLICT (id) DO UPDATE SET
+//         delta = EXCLUDED.delta,
+//         value = EXCLUDED.value,
+//         hash = EXCLUDED.hash
+// 	`,
+// 		metric.ID, metric.MType, metric.Delta, metric.Value, metric.Hash)
+
+// 	fmt.Println(res)
+
+// 	if err != nil {
+// 		fmt.Printf("isert err! err=%v", err)
+// 		return
+// 	}
+
+// 	row := db.QueryRowContext(context.Background(),
+// 		"SELECT delta, value, mtype FROM metrics WHERE id = $1", metric.ID)
+// 	var (
+// 		mtype string
+// 		delta sql.NullInt64
+// 		value sql.NullFloat64
+// 	)
+// 	// порядок переменных должен соответствовать порядку колонок в запросе
+// 	err = row.Scan(&delta, &value, &mtype)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	fmt.Printf("%v | %v | %s \r\n", delta, value, mtype)
+
+// }

@@ -114,7 +114,7 @@ func main() {
 			agent.Add(&memStats)
 		case <-reportTicker.C:
 			fmt.Println("отправляю данные")
-			agent.Send()
+			agent.SendAll()
 			//memStorage := models.MakeMemStorage()
 
 		}

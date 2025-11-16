@@ -262,6 +262,77 @@ func (h Handler) UpdateJSON(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusOK)
 }
 
+func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
+
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if req.Header.Get("Content-Type") != "application/json" {
+		res.WriteHeader(http.StatusResetContent)
+		return
+	}
+
+	//var metric models.Metrics
+
+	var metrics []models.Metrics
+
+	var buf bytes.Buffer
+	// читаем тело запроса
+	_, err := buf.ReadFrom(req.Body)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// десериализуем JSON в Metric
+	if err = json.Unmarshal(buf.Bytes(), &metrics); err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if massUpdater, ok := h.repo.(repository.MassUpdater); ok {
+		err := massUpdater.MassUpdate(metrics)
+		if err != nil {
+			http.Error(res, fmt.Sprintf("mass updater выдал ошибку: %v, err = %s \r\n", metrics, err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		for _, metric := range metrics {
+			switch metric.MType {
+			case "counter":
+				if metric.Delta == nil {
+					http.Error(res, fmt.Sprintf("Нет значения метрики: %v \r\n", metric), http.StatusBadRequest)
+					return
+				}
+
+				err := h.repo.UpdateCounter(metric.ID, *metric.Delta)
+				if err != nil {
+					http.Error(res, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+			case "gauge":
+				if metric.Value == nil {
+					http.Error(res, fmt.Sprintf("Нет значения метрики: %v \r\n", metric), http.StatusBadRequest)
+					return
+				}
+
+				err := h.repo.UpdateGauge(metric.ID, *metric.Value)
+				if err != nil {
+					http.Error(res, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			default:
+				http.Error(res, fmt.Sprintf("Неизвестное тип метрики: %v \r\n", metric.MType), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
+	res.WriteHeader(http.StatusOK)
+}
+
 func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 	//Content-Type application/json
 	if req.Method != http.MethodPost {
