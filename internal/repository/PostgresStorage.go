@@ -236,7 +236,7 @@ func (ps *PostgresStorage) MassUpdate(metrics []models.Metrics) error {
 
 }
 
-// func testSQL() {
+// func testSQL() {	//
 // 	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
 // 		`localhost`, `dbtest1`, `dbtest1`, `dbtest1`)
 
