@@ -83,13 +83,14 @@ func (ps *PostgresStorage) UpdateCounter(key string, value int64) error {
 
 func (ps *PostgresStorage) update(mtype string, id string, delta *int64, value *float64) error {
 
+	//тут важный нюанс, если случайно тип метрики изменится при старом ид, то сумма всегда будет обнуляться (NULL + что-то всегда нулл)
 	_, err := ps.db.ExecContext(
 		context.Background(), `
 		INSERT INTO metrics (id, mtype, delta, value, hash) 
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (id) DO UPDATE SET 
 			mtype = EXCLUDED.mtype,	
-			delta = EXCLUDED.delta,
+			delta = metrics.delta + EXCLUDED.delta,
 			value = EXCLUDED.value,
 			hash = EXCLUDED.hash
 		`,
@@ -212,13 +213,14 @@ func (ps *PostgresStorage) MassUpdate(metrics []models.Metrics) error {
 	}
 
 	for _, metric := range metrics {
+		//тут важный нюанс, если случайно тип метрики изменится при старом ид, то сумма всегда будет обнуляться (NULL + что-то всегда нулл)
 		// все изменения записываются в транзакцию
 		_, err := tx.ExecContext(context.Background(), `
 			INSERT INTO metrics (id, mtype, delta, value, hash) 
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (id) DO UPDATE SET 
 				mtype = EXCLUDED.mtype,	
-				delta = EXCLUDED.delta,
+				delta = metrics.delta + EXCLUDED.delta,
 				value = EXCLUDED.value,
 				hash = EXCLUDED.hash
 			`,
