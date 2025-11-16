@@ -67,7 +67,7 @@ func main() {
 	var handlerv *handler.Handler
 	if serverConfig.DatabaseDSN != "" {
 
-		pstorage, err := repository.MakePostgresStorage(serverConfig.DatabaseDSN)
+		pstorage, err := repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
 		if err != nil {
 			// вызываем панику, если ошибка
 			panic("cannot initialize postgress")
