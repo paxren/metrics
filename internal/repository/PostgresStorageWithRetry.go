@@ -38,45 +38,14 @@ func MakePostgresStorageWithRetry(con string) (*PostgresStorageWithRetry, error)
 	}, nil
 }
 
-// func (ps *PostgresStorageWithRetry) executeWithRetry(undateFn func(string, float64) error,
-// 	getFn func(string) (float64, error),
-// 	pingFn func() error,
-// 	massUpdFn func([]models.Metrics) error,
-// ) error {
-// 	const maxRetries = 3
-// 	var lastErr error
-
-// 	for attempt := 0; attempt < maxRetries; attempt++ {
-
-// 		//вызов функции
-// 		if undateFn != nil {
-
-// 		}
-
-// 		// Определяем классификацию ошибки
-// 		classification := ps.classifier.Classify(err)
-
-// 		if classification == NonRetriable {
-// 			// Нет смысла повторять, возвращаем ошибку
-// 			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-// 			return err
-// 		}
-
-// 		// .... делаем что-то полезное
-// 	}
-
-// 	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
-// }
-
-func (ps *PostgresStorageWithRetry) UpdateGauge(key string, value float64) error {
-
+func (ps *PostgresStorageWithRetry) executeWithRetry(undateFn func() error) error {
 	const maxRetries = 3
 	var lastErr error
 	var waitSec int64 = 1
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 
-		err := ps.PostgresStorage.UpdateGauge(key, value)
+		err := undateFn()
 		if err == nil {
 			return nil
 		}
@@ -97,166 +66,254 @@ func (ps *PostgresStorageWithRetry) UpdateGauge(key string, value float64) error
 	}
 
 	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+}
+
+func (ps *PostgresStorageWithRetry) UpdateGauge(key string, value float64) error {
+
+	var err1 error
+	fn := func() error {
+		err := ps.PostgresStorage.UpdateGauge(key, value)
+		return err
+	}
+	err1 = ps.executeWithRetry(fn)
+
+	return err1
+	// const maxRetries = 3
+	// var lastErr error
+	// var waitSec int64 = 1
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	err := ps.PostgresStorage.UpdateGauge(key, value)
+	// 	if err == nil {
+	// 		return nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// 	// .... делаем что-то полезное
+	// }
+
+	// return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 
 }
 
 func (ps *PostgresStorageWithRetry) UpdateCounter(key string, value int64) error {
 
-	const maxRetries = 3
-	var lastErr error
-	var waitSec int64 = 1
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-
+	var err1 error
+	fn := func() error {
 		err := ps.PostgresStorage.UpdateCounter(key, value)
-		if err == nil {
-			return nil
-		}
-		// Определяем классификацию ошибки
-		classification := ps.classifier.Classify(err)
-
-		if classification == NonRetriable {
-			// Нет смысла повторять, возвращаем ошибку
-			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-			return err
-		}
-
-		lastErr = err
-
-		time.Sleep(time.Duration(waitSec) * time.Second)
-		waitSec += 2
-		// .... делаем что-то полезное
+		return err
 	}
+	err1 = ps.executeWithRetry(fn)
 
-	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+	return err1
+
+	// const maxRetries = 3
+	// var lastErr error
+	// var waitSec int64 = 1
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	err := ps.PostgresStorage.UpdateCounter(key, value)
+	// 	if err == nil {
+	// 		return nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// 	// .... делаем что-то полезное
+	// }
+
+	// return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 }
 
 func (ps *PostgresStorageWithRetry) GetGauge(key string) (float64, error) {
 
-	const maxRetries = 3
-	var lastErr error
 	var err error
-	var waitSec int64 = 1
-	var res float64
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-
-		res, err = ps.PostgresStorage.GetGauge(key)
-		if err == nil {
-			return res, nil
-		}
-		// Определяем классификацию ошибки
-		classification := ps.classifier.Classify(err)
-
-		if classification == NonRetriable {
-			// Нет смысла повторять, возвращаем ошибку
-			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-			return 0, err
-		}
-
-		lastErr = err
-
-		time.Sleep(time.Duration(waitSec) * time.Second)
-		waitSec += 2
+	var value float64
+	fn := func() error {
+		value, err = ps.PostgresStorage.GetGauge(key)
+		return err
 	}
+	_ = ps.executeWithRetry(fn)
 
-	return 0, fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+	return value, err
+
+	// const maxRetries = 3
+	// var lastErr error
+	// var err error
+	// var waitSec int64 = 1
+	// var res float64
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	res, err = ps.PostgresStorage.GetGauge(key)
+	// 	if err == nil {
+	// 		return res, nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return 0, err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// }
+
+	// return 0, fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 
 }
 
 func (ps *PostgresStorageWithRetry) GetCounter(key string) (int64, error) {
 
-	const maxRetries = 3
-	var lastErr error
 	var err error
-	var waitSec int64 = 1
-	var res int64
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-
-		res, err = ps.PostgresStorage.GetCounter(key)
-		if err == nil {
-			return res, nil
-		}
-		// Определяем классификацию ошибки
-		classification := ps.classifier.Classify(err)
-
-		if classification == NonRetriable {
-			// Нет смысла повторять, возвращаем ошибку
-			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-			return 0, err
-		}
-
-		lastErr = err
-
-		time.Sleep(time.Duration(waitSec) * time.Second)
-		waitSec += 2
+	var value int64
+	fn := func() error {
+		value, err = ps.PostgresStorage.GetCounter(key)
+		return err
 	}
+	_ = ps.executeWithRetry(fn)
 
-	return 0, fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+	return value, err
+
+	// const maxRetries = 3
+	// var lastErr error
+	// var err error
+	// var waitSec int64 = 1
+	// var res int64
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	res, err = ps.PostgresStorage.GetCounter(key)
+	// 	if err == nil {
+	// 		return res, nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return 0, err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// }
+
+	// return 0, fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 
 }
 
 func (ps *PostgresStorageWithRetry) Ping() error {
 
-	const maxRetries = 3
-	var lastErr error
-	var err error
-	var waitSec int64 = 1
+	var err1 error
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-
-		err = ps.PostgresStorage.Ping()
-		if err == nil {
-			return nil
-		}
-		// Определяем классификацию ошибки
-		classification := ps.classifier.Classify(err)
-
-		if classification == NonRetriable {
-			// Нет смысла повторять, возвращаем ошибку
-			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-			return err
-		}
-
-		lastErr = err
-
-		time.Sleep(time.Duration(waitSec) * time.Second)
-		waitSec += 2
+	fn := func() error {
+		err := ps.PostgresStorage.Ping()
+		return err
 	}
+	err1 = ps.executeWithRetry(fn)
 
-	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+	return err1
+
+	// const maxRetries = 3
+	// var lastErr error
+	// var err error
+	// var waitSec int64 = 1
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	err = ps.PostgresStorage.Ping()
+	// 	if err == nil {
+	// 		return nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// }
+
+	// return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 
 }
 
 func (ps *PostgresStorageWithRetry) MassUpdate(metrics []models.Metrics) error {
 
-	const maxRetries = 3
-	var lastErr error
-	var err error
-	var waitSec int64 = 1
+	var err1 error
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-
-		err = ps.PostgresStorage.MassUpdate(metrics)
-		if err == nil {
-			return nil
-		}
-		// Определяем классификацию ошибки
-		classification := ps.classifier.Classify(err)
-
-		if classification == NonRetriable {
-			// Нет смысла повторять, возвращаем ошибку
-			fmt.Printf("Непредвиденная ошибка: %v\n", err)
-			return err
-		}
-
-		lastErr = err
-
-		time.Sleep(time.Duration(waitSec) * time.Second)
-		waitSec += 2
+	fn := func() error {
+		err := ps.PostgresStorage.MassUpdate(metrics)
+		return err
 	}
+	err1 = ps.executeWithRetry(fn)
 
-	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
+	return err1
+
+	// const maxRetries = 3
+	// var lastErr error
+	// var err error
+	// var waitSec int64 = 1
+
+	// for attempt := 0; attempt < maxRetries; attempt++ {
+
+	// 	err = ps.PostgresStorage.MassUpdate(metrics)
+	// 	if err == nil {
+	// 		return nil
+	// 	}
+	// 	// Определяем классификацию ошибки
+	// 	classification := ps.classifier.Classify(err)
+
+	// 	if classification == NonRetriable {
+	// 		// Нет смысла повторять, возвращаем ошибку
+	// 		fmt.Printf("Непредвиденная ошибка: %v\n", err)
+	// 		return err
+	// 	}
+
+	// 	lastErr = err
+
+	// 	time.Sleep(time.Duration(waitSec) * time.Second)
+	// 	waitSec += 2
+	// }
+
+	// return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 
 }
