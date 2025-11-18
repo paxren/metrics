@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
@@ -29,12 +31,9 @@ func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 	}
 }
 
-func (a Agent) SendAll() []error {
+func (a Agent) makeMetrics() ([]models.Metrics, []error) {
 
 	errors := make([]error, 0)
-
-	client := http.Client{}
-
 	metrics := make([]models.Metrics, 0, 10)
 
 	gaugesKeys := a.Repo.GetGaugesKeys()
@@ -69,10 +68,17 @@ func (a Agent) SendAll() []error {
 		}
 	}
 
+	return metrics, errors
+}
+
+func (a Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
+
+	errors := make([]error, 0)
+	//var request *http.Request
 	metricJSON, err := json.Marshal(metrics)
 	if err != nil {
 		errors = append(errors, err)
-		return errors
+		return nil, errors
 	}
 
 	var gzipped bytes.Buffer
@@ -83,12 +89,12 @@ func (a Agent) SendAll() []error {
 	_, err = w.Write(metricJSON)
 	if err != nil {
 		errors = append(errors, err)
-		return errors
+		return nil, errors
 	}
 	err = w.Close()
 	if err != nil {
 		errors = append(errors, err)
-		return errors
+		return nil, errors
 	}
 
 	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/updates", &gzipped)
@@ -99,11 +105,55 @@ func (a Agent) SendAll() []error {
 	request.Header.Set(`Accept-Encoding`, `gzip`)
 	request.Header.Set(`Content-Encoding`, `gzip`)
 
-	response, err := client.Do(request)
-	if err != nil {
-		errors = append(errors, err)
-		return errors
+	return request, errors
+
+}
+
+func (a Agent) SendAll() []error {
+
+	errors := make([]error, 0)
+
+	client := http.Client{}
+
+	metrics, errors1 := a.makeMetrics()
+
+	errors = append(errors, errors1...)
+
+	request, errors2 := a.makeRequest(metrics)
+	errors = append(errors, errors2...)
+
+	const maxRetries = 3
+
+	var waitSec int64 = 1
+	var response *http.Response
+	var success = false
+	var attempt int64 = 0
+	var err error
+	//attempt := 0; attempt < maxRetries; attempt++
+
+	for !success {
+
+		response, err = client.Do(request)
+		if err != nil {
+			fmt.Printf("net err: %t %v\n", err, err)
+			if attempt < maxRetries {
+				fmt.Printf("жду...\n")
+				errors = append(errors, err)
+				time.Sleep(time.Duration(waitSec) * time.Second)
+				waitSec += 2
+			} else {
+				fmt.Printf("не дождался...\n")
+				return errors
+			}
+			attempt++
+
+			//
+		} else {
+			success = true
+		}
+
 	}
+
 	defer response.Body.Close()
 
 	//response.Header.Get("Content-Encoding")
