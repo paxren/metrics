@@ -13,6 +13,12 @@ import (
 
 // ПОТОКО НЕБЕЗОПАСНО!
 
+// type UpdateGauge func(key string, value float64) error
+
+// func (f UpdateGauge) Execute(w ResponseWriter, r *Request) {
+// 	f(w, r)
+// }
+
 type PostgresStorageWithRetry struct {
 	*PostgresStorage
 	classifier *PostgresErrorClassifier

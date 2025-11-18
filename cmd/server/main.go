@@ -70,7 +70,12 @@ func main() {
 		pstorage, err := repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
 		if err != nil {
 			// вызываем панику, если ошибка
-			panic("cannot initialize postgress")
+			sugar.Fatal(
+				"Storage init1",
+				"Storage obj", pstorage,
+				"err", pstorage,
+			)
+			//panic("cannot initialize postgress")
 		}
 
 		sugar.Infow(
