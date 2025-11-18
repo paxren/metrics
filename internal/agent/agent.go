@@ -150,11 +150,10 @@ func (a Agent) SendAll() []error {
 			//
 		} else {
 			success = true
+			defer response.Body.Close()
 		}
 
 	}
-
-	defer response.Body.Close()
 
 	//response.Header.Get("Content-Encoding")
 	contentEncoding := response.Header.Get("Content-Encoding")
