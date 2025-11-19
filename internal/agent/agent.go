@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
@@ -27,6 +29,164 @@ func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 		Repo: r,
 		host: host,
 	}
+}
+
+func (a Agent) makeMetrics() ([]models.Metrics, []error) {
+
+	errors := make([]error, 0)
+	metrics := make([]models.Metrics, 0, 10)
+
+	gaugesKeys := a.Repo.GetGaugesKeys()
+	for _, vkey := range gaugesKeys {
+		vv, err := a.Repo.GetGauge(vkey)
+
+		if err == nil {
+			metrics = append(metrics, models.Metrics{
+				ID:    vkey,
+				MType: models.Gauge,
+				Value: &vv,
+			})
+		} else {
+			errors = append(errors, err)
+		}
+
+	}
+
+	countersKeys := a.Repo.GetCountersKeys()
+	for _, vkey := range countersKeys {
+
+		vv, err := a.Repo.GetCounter(vkey)
+
+		if err == nil {
+			metrics = append(metrics, models.Metrics{
+				ID:    vkey,
+				MType: models.Counter,
+				Delta: &vv,
+			})
+		} else {
+			errors = append(errors, err)
+		}
+	}
+
+	return metrics, errors
+}
+
+func (a Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
+
+	errors := make([]error, 0)
+	//var request *http.Request
+	metricJSON, err := json.Marshal(metrics)
+	if err != nil {
+		errors = append(errors, err)
+		return nil, errors
+	}
+
+	var gzipped bytes.Buffer
+	// создаём переменную w — в неё будут записываться входящие данные,
+	// которые будут сжиматься и сохраняться в bytes.Buffer
+	w := gzip.NewWriter(&gzipped)
+
+	_, err = w.Write(metricJSON)
+	if err != nil {
+		errors = append(errors, err)
+		return nil, errors
+	}
+	err = w.Close()
+	if err != nil {
+		errors = append(errors, err)
+		return nil, errors
+	}
+
+	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/updates", &gzipped)
+	if err != nil {
+		errors = append(errors, err)
+	}
+	request.Header.Set(`Content-Type`, `application/json`)
+	request.Header.Set(`Accept-Encoding`, `gzip`)
+	request.Header.Set(`Content-Encoding`, `gzip`)
+
+	return request, errors
+
+}
+
+func (a Agent) SendAll() []error {
+
+	errors := make([]error, 0)
+
+	client := http.Client{}
+
+	metrics, errors1 := a.makeMetrics()
+
+	errors = append(errors, errors1...)
+
+	request, errors2 := a.makeRequest(metrics)
+	errors = append(errors, errors2...)
+
+	const maxRetries = 3
+
+	var waitSec int64 = 1
+	var response *http.Response
+	var success = false
+	var attempt int64 = 0
+	var err error
+	//attempt := 0; attempt < maxRetries; attempt++
+
+	for !success {
+
+		response, err = client.Do(request)
+		if err != nil {
+			fmt.Printf("net err: %t %v\n", err, err)
+			if attempt < maxRetries {
+				fmt.Printf("жду...\n")
+				errors = append(errors, err)
+				time.Sleep(time.Duration(waitSec) * time.Second)
+				waitSec += 2
+			} else {
+				fmt.Printf("не дождался...\n")
+				return errors
+			}
+			attempt++
+
+			//
+		} else {
+			success = true
+			defer response.Body.Close()
+		}
+
+	}
+
+	//response.Header.Get("Content-Encoding")
+	contentEncoding := response.Header.Get("Content-Encoding")
+	receiveGzip := strings.Contains(contentEncoding, "gzip")
+
+	if receiveGzip {
+
+		// переменная r будет читать входящие данные и распаковывать их
+		r, err := gzip.NewReader(response.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+		defer r.Close()
+
+		var b bytes.Buffer
+		// в переменную b записываются распакованные данные
+		_, err = b.ReadFrom(r)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+
+		io.Copy(os.Stdout, &b) // вывод ответа в консоль
+		//fmt.Println(1)
+	} //else {
+	//TODO сжатый другим методом или несжатый
+	//io.Copy(os.Stdout, response.Body)
+	//}
+	//response.Body.Close()
+
+	return errors
+
 }
 
 func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []error) []error {

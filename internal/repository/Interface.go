@@ -1,6 +1,10 @@
 package repository
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/paxren/metrics/internal/models"
+)
 
 var (
 	ErrGaugeNotFound   = errors.New("метрика gauge не найдена")
@@ -14,4 +18,12 @@ type Repository interface {
 	GetCounter(key string) (int64, error)
 	GetGaugesKeys() []string
 	GetCountersKeys() []string
+}
+
+type Pinger interface {
+	Ping() error
+}
+
+type MassUpdater interface {
+	MassUpdate(metrics []models.Metrics) error
 }

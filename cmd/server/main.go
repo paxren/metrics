@@ -12,6 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var (
@@ -50,20 +54,75 @@ func main() {
 		"serverConfig", serverConfig,
 	)
 
+	//testSQL()
 	//os.Exit(1)
 	// PREPARE STORAGES
-	storage := repository.MakeMemStorage()
-	//работа с файлами
-	savedStorage := repository.MakeSavedRepo(storage, serverConfig.FileStoragePath, serverConfig.StoreInterval)
+	finish := make([]func() error, 0, 1)
+	var storage repository.Repository
+	sugar.Infow(
+		"Storage init0",
+		"Storage obj", storage,
+	)
 
-	if serverConfig.Restore {
-		_ = savedStorage.Load(serverConfig.FileStoragePath)
-		// if err != nil {
-		// 	panic(err)
-		// }
+	var handlerv *handler.Handler
+	if serverConfig.DatabaseDSN != "" {
+
+		pstorage, err := repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
+		if err != nil {
+			// вызываем панику, если ошибка
+			sugar.Fatal(
+				"Storage init1",
+				"Storage obj", pstorage,
+				"err", pstorage,
+			)
+			//panic("cannot initialize postgress")
+		}
+
+		sugar.Infow(
+			"postgresStorage init",
+			"postgresStorage obj", pstorage,
+		)
+
+		storage = pstorage
+
+		finish = append(finish, pstorage.Close)
+	} else {
+		mstorage := repository.MakeMemStorage()
+		//работа с файлами
+		savedStorage := repository.MakeSavedRepo(mstorage, serverConfig.FileStoragePath, serverConfig.StoreInterval)
+		sugar.Infow(
+			"savedStorage init",
+			"savedStorage obj", savedStorage,
+		)
+		if serverConfig.Restore {
+			_ = savedStorage.Load(serverConfig.FileStoragePath)
+			// if err != nil {
+			// 	panic(err)
+			// }
+		}
+
+		storage = savedStorage
+
+		finish = append(finish, savedStorage.Save)
 	}
+
 	//запуск обработчиков
-	handlerv := handler.NewHandler(savedStorage)
+	sugar.Infow(
+		"Storage init1",
+		"Storage obj", storage,
+	)
+
+	handlerv = handler.NewHandler(storage)
+	sugar.Infow(
+		"handler init",
+		"handler obj", handlerv,
+	)
+	//TODO переделать
+	//handlerv.SetDBString(serverConfig.DatabaseDSN)
+	sugar.Infow(
+		"handler set db",
+		"handler obj", handlerv,
+	)
 	//fmt.Printf("host param: %s", hostAdress.String())
 
 	r := chi.NewRouter()
@@ -73,7 +132,11 @@ func main() {
 	r.Post(`/update/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON)))
 	r.Post(`/value`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON)))
 	r.Post(`/update`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON)))
+	r.Post(`/updates`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdatesJSON)))
+	r.Post(`/updates/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdatesJSON)))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
+	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
+	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
 
 	server := &http.Server{
@@ -97,6 +160,9 @@ func main() {
 	<-rootCtx.Done()
 	stop()
 	server.Shutdown(context.Background())
-	savedStorage.Save()
-
+	for _, f := range finish {
+		f()
+	}
+	//savedStorage.Save()
+	//TODO закрытие базы
 }
