@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/hash"
 	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
 
@@ -20,14 +21,34 @@ import (
 )
 
 type Agent struct {
-	Repo repository.Repository
-	host config.HostAddress
+	Repo         repository.Repository
+	host         config.HostAddress
+	hashKey      string
+	hashKeyBytes []byte
 }
 
 func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 	return &Agent{
-		Repo: r,
-		host: host,
+		Repo:         r,
+		host:         host,
+		hashKey:      "",
+		hashKeyBytes: nil,
+	}
+}
+
+func NewAgentWithKey(r repository.Repository, host config.HostAddress, key string) *Agent {
+
+	var hashKeyBytes []byte = nil
+	if key != "" {
+		hashKeyBytes = []byte(key)
+	}
+
+	fmt.Printf("hashBytes %s %v\n", hashKeyBytes, hashKeyBytes)
+	return &Agent{
+		Repo:         r,
+		host:         host,
+		hashKey:      key,
+		hashKeyBytes: hashKeyBytes,
 	}
 }
 
@@ -104,6 +125,18 @@ func (a Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 	request.Header.Set(`Content-Type`, `application/json`)
 	request.Header.Set(`Accept-Encoding`, `gzip`)
 	request.Header.Set(`Content-Encoding`, `gzip`)
+
+	fmt.Println("a1")
+	if a.hashKeyBytes != nil {
+		fmt.Println("a2")
+		src := make([]byte, gzipped.Len())
+		copy(src, gzipped.Bytes())
+		hash, err := hash.MakeHash(&a.hashKeyBytes, &src)
+		if err == nil {
+			fmt.Println(hash)
+			request.Header.Set(`HashSHA256`, hash)
+		}
+	}
 
 	return request, errors
 

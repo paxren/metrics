@@ -17,13 +17,15 @@ import (
 )
 
 var (
-	hostAdress           = config.NewHostAddress()
-	reportInterval int64 = 10
-	pollInterval   int64 = 2
+	hostAdress            = config.NewHostAddress()
+	reportInterval int64  = 10
+	pollInterval   int64  = 2
+	key            string = ""
 
-	paramHostAdress           = config.NewHostAddress()
-	paramReportInterval int64 = 10
-	paramPollInterval   int64 = 2
+	paramHostAdress            = config.NewHostAddress()
+	paramReportInterval int64  = 10
+	paramPollInterval   int64  = 2
+	paramKey            string = ""
 )
 
 type ConfigRI struct {
@@ -32,6 +34,10 @@ type ConfigRI struct {
 
 type ConfigPI struct {
 	Val int64 `env:"POLL_INTERVAL,required"`
+}
+
+type ConfigKey struct {
+	Val string `env:"KEY,required"`
 }
 
 func init() {
@@ -81,13 +87,25 @@ func main() {
 		//fmt.Printf("Successfully parsed POLL_INTERVAL: %d\n", pi.Val)
 		pollInterval = pi.Val
 	}
+
+	var testKey ConfigKey
+	err4 := env.Parse(&testKey)
+	//fmt.Printf("POLL_INTERVAL from os.Getenv: %s\n", os.Getenv("POLL_INTERVAL"))
+	fmt.Printf("key=%v  err=%v \n", testKey, err4)
+	if err4 != nil {
+		//fmt.Printf("Error parsing POLL_INTERVAL: %v, using default value\n", err3)
+		key = paramKey
+	} else {
+		//fmt.Printf("Successfully parsed POLL_INTERVAL: %d\n", pi.Val)
+		key = testKey.Val
+	}
 	//======== START
 
 	fmt.Printf("report interval: %d \r\n poll interval: %d \r\n", reportInterval, pollInterval)
 
 	var memStats runtime.MemStats
 
-	agent := agent.NewAgent(repository.MakeMemStorage(), *hostAdress)
+	agent := agent.NewAgentWithKey(repository.MakeMemStorage(), *hostAdress, key)
 
 	var PollCount int64
 	var randFloat float64
