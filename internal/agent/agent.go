@@ -211,11 +211,14 @@ func (a Agent) SendAll() []error {
 		}
 
 		io.Copy(os.Stdout, &b) // вывод ответа в консоль
-		//fmt.Println(1)
-	} //else {
-	//TODO сжатый другим методом или несжатый
-	//io.Copy(os.Stdout, response.Body)
-	//}
+		//fmt.Println("re")
+		//fmt.Printf("responce body %s\n", b)
+	} else {
+		//TODO сжатый другим методом или несжатый
+		io.Copy(os.Stdout, response.Body)
+		//fmt.Println("re2")
+		//fmt.Printf("responce body %s\n", &response.Body)
+	}
 	//response.Body.Close()
 
 	return errors
