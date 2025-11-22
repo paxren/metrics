@@ -8,7 +8,7 @@ import (
 
 func MakeHash(key *[]byte, src *[]byte) (string, error) {
 
-	fmt.Printf("original: %s\n", src)
+	//fmt.Printf("original: %s\n", src)
 	// подписываемое сообщение
 	//src := []byte("Видишь гофера? Нет. И я нет. А он есть.")
 
@@ -27,6 +27,6 @@ func MakeHash(key *[]byte, src *[]byte) (string, error) {
 	}
 	dst := h.Sum(nil)
 
-	fmt.Printf("dest %x \n", dst)
+	//fmt.Printf("dest %x \n", dst)
 	return fmt.Sprintf("%x", dst), nil
 }

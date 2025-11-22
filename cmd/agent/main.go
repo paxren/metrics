@@ -45,6 +45,7 @@ func init() {
 	flag.Var(paramHostAdress, "a", "Net address host:port")
 	flag.Int64Var(&paramReportInterval, "r", 10, "reportInterval")
 	flag.Int64Var(&paramPollInterval, "p", 2, "pollInterval")
+	flag.StringVar(&paramKey, "k", "", "pollInterval")
 }
 
 func main() {
