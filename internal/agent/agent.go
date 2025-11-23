@@ -192,6 +192,7 @@ func (a Agent) SendAll() []error {
 	contentEncoding := response.Header.Get("Content-Encoding")
 	receiveGzip := strings.Contains(contentEncoding, "gzip")
 
+	var bd []byte
 	if receiveGzip {
 
 		// переменная r будет читать входящие данные и распаковывать их
@@ -210,17 +211,38 @@ func (a Agent) SendAll() []error {
 			return errors
 		}
 
+		bd = b.Bytes()
+		fmt.Printf("aa0 bd = %v\n", bd)
+
 		io.Copy(os.Stdout, &b) // вывод ответа в консоль
 		//fmt.Println("re")
 		//fmt.Printf("responce body %s\n", b)
 	} else {
 		//TODO сжатый другим методом или несжатый
-		io.Copy(os.Stdout, response.Body)
+		var err error
+		bd, err = io.ReadAll(response.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+
+		fmt.Printf("aa1 bd = %v\n", bd)
+		io.Copy(os.Stdout, bytes.NewReader(bd))
+
 		//fmt.Println("re2")
 		//fmt.Printf("responce body %s\n", &response.Body)
 	}
 	//response.Body.Close()
 
+	if a.hashKeyBytes != nil {
+		fmt.Printf("aa2 bd = %v\n", bd)
+
+		hash, err := hash.MakeHash(&a.hashKeyBytes, &bd)
+		if err == nil {
+			fmt.Println(hash)
+		}
+	}
+	fmt.Printf("\n\nstatus code %d\n", response.StatusCode)
 	return errors
 
 }

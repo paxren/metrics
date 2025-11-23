@@ -11,16 +11,18 @@ import (
 // compressWriter реализует интерфейс http.ResponseWriter и позволяет прозрачно для сервера
 // сжимать передаваемые данные и выставлять правильные HTTP-заголовки
 type compressWriter struct {
-	w            http.ResponseWriter
-	zw           *gzip.Writer
-	needCompress bool
+	w               http.ResponseWriter
+	zw              *gzip.Writer
+	needCompress    bool
+	needCompressSet bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	return &compressWriter{
-		w:            w,
-		zw:           gzip.NewWriter(w),
-		needCompress: false,
+		w:               w,
+		zw:              gzip.NewWriter(w),
+		needCompress:    false,
+		needCompressSet: false,
 	}
 }
 
@@ -30,6 +32,11 @@ func (c *compressWriter) Header() http.Header {
 
 func (c *compressWriter) Write(p []byte) (int, error) {
 
+	if !c.needCompressSet {
+		fmt.Println("ERROR")
+		fmt.Println("ERROR")
+		fmt.Println("ERROR")
+	}
 	if c.needCompress {
 		return c.zw.Write(p)
 	} else {
@@ -48,7 +55,7 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 		c.w.Header().Set("Content-Encoding", "gzip")
 
 	}
-	fmt.Printf("info needcompression=%v headers=%v \n", c.needCompress, c.w.Header())
+	fmt.Printf("info needcompression=%v headers=%v  compressed=%v \n", c.needCompress, c.w.Header(), statusCode < 300 && needCompress)
 	c.w.WriteHeader(statusCode)
 
 	// if statusCode < 300 {
@@ -81,7 +88,7 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	}, nil
 }
 
-func (c compressReader) Read(p []byte) (n int, err error) {
+func (c *compressReader) Read(p []byte) (n int, err error) {
 	return c.zr.Read(p)
 }
 
@@ -130,6 +137,8 @@ func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// передаём управление хендлеру
+		fmt.Println("===compressor before serve hash")
 		h.ServeHTTP(ow, r)
+		fmt.Println("===compressor after serve hash")
 	}
 }
