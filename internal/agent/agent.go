@@ -2,8 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/paxren/metrics/internal/config"
@@ -20,46 +22,157 @@ import (
 	"encoding/json"
 )
 
+const numJobs = 5
+
 type Agent struct {
-	Repo         repository.Repository
-	host         config.HostAddress
-	hashKey      string
-	hashKeyBytes []byte
+	Repo           repository.Repository
+	host           config.HostAddress
+	hashKey        string
+	hashKeyBytes   []byte
+	numWorkers     int64
+	jobs           chan []models.Metrics
+	numJobs        int64
+	once           sync.Once
+	pollTicker     *time.Ticker
+	reportTicker   *time.Ticker
+	pollInterval   int64
+	reportInterval int64
+	memStats       runtime.MemStats
+	PollCount      int64
+	randFloat      float64
+	done           chan struct{}
 }
 
+// оставлено для совместимости с тестами
+// всё равно сломал?
 func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
-	return &Agent{
-		Repo:         r,
-		host:         host,
-		hashKey:      "",
-		hashKeyBytes: nil,
+	agent := &Agent{
+		Repo:           r,
+		host:           host,
+		hashKey:        "",
+		hashKeyBytes:   nil,
+		numWorkers:     1,
+		numJobs:        numJobs,
+		jobs:           make(chan []models.Metrics, numJobs),
+		done:           make(chan struct{}),
+		pollInterval:   2,
+		reportInterval: 10,
 	}
+
+	//agent.Start() //чтобы тесты работали НЕЛЬЗЯ тк тогда инициализация второй не пройдт
+
+	return agent
 }
 
-func NewAgentWithKey(r repository.Repository, host config.HostAddress, key string) *Agent {
+func NewAgentExtended(r repository.Repository, host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64) *Agent {
+
+	fmt.Println("======dfsdfs==========")
+	agent := NewAgent(r, host)
 
 	var hashKeyBytes []byte = nil
 	if key != "" {
 		hashKeyBytes = []byte(key)
 	}
+	agent.hashKey = key
+	agent.hashKeyBytes = hashKeyBytes
 
-	fmt.Printf("hashBytes %s %v\n", hashKeyBytes, hashKeyBytes)
-	return &Agent{
-		Repo:         r,
-		host:         host,
-		hashKey:      key,
-		hashKeyBytes: hashKeyBytes,
+	if num < 1 {
+		num = 1
 	}
+	agent.numWorkers = num
+
+	if pollInterval >= 1 {
+		agent.pollInterval = pollInterval
+	}
+
+	if reportInterval >= 1 {
+		agent.reportInterval = reportInterval
+	}
+
+	fmt.Printf("agent %v\n", agent)
+	//agent.startWorkers()
+
+	return agent
 }
 
-func (a Agent) makeMetrics() ([]models.Metrics, []error) {
+func (a *Agent) Finish() {
+	//тут прекращаем всё работу агента
+	close(a.jobs)
+	close(a.done)
+}
+
+func (a *Agent) Start() {
+
+	//TODO проверка на единоразовость (once?)
+
+	a.once.Do(func() {
+		// эта инициализация выполнится только один раз
+		fmt.Println("должен запуститься только один раз!")
+
+		a.pollTicker = time.NewTicker(time.Duration(a.pollInterval) * time.Second)
+		a.reportTicker = time.NewTicker(time.Duration(a.reportInterval) * time.Second)
+
+		// создаем и запускаем 3 воркера, это и есть пул,
+		// передаем id, это для наглядности, канал задач и канал результатов
+		for w := 1; w <= int(a.numWorkers); w++ {
+			go a.worker(w, a.jobs)
+		}
+
+		go a.startPoll(a.Repo, a.pollStdMetrics)
+		//go a.startPoll(a.RepoExt, a.pollExtMetrics)
+
+		<-a.done
+	})
+
+}
+
+func (a *Agent) pollStdMetrics(repo repository.Repository) {
+
+	fmt.Println("собираю данные")
+	runtime.ReadMemStats(&a.memStats)
+
+	a.PollCount++
+
+	repo.UpdateCounter("PollCount", a.PollCount)
+	//test1, _ = agent.Repo.GetCounter("PollCount")
+	a.randFloat = rand.Float64()
+	repo.UpdateGauge("RandomValue", a.randFloat)
+	//fmt.Printf("memstorage: %v \r\n", agent.Repo)
+	//fmt.Printf("memstorage: %v \r\n", test1)
+	a.Add(&a.memStats)
+
+}
+
+func (a *Agent) startPoll(repo repository.Repository, fn func(repository.Repository)) {
+
+	pollTicker := time.NewTicker(time.Duration(a.pollInterval) * time.Second)
+	reportTicker := time.NewTicker(time.Duration(a.reportInterval) * time.Second)
+	for {
+
+		select {
+		case <-pollTicker.C:
+			fn(repo)
+		case <-reportTicker.C:
+			fmt.Println("отправляю данные")
+
+			metricsSlice, _ := a.makeMetrics(repo)
+			a.SendAll(metricsSlice)
+			//memStorage := models.MakeMemStorage()
+
+		}
+
+	}
+
+}
+
+func (a *Agent) makeMetrics(repo repository.Repository) ([]models.Metrics, []error) {
 
 	errors := make([]error, 0)
 	metrics := make([]models.Metrics, 0, 10)
 
-	gaugesKeys := a.Repo.GetGaugesKeys()
+	gaugesKeys := repo.GetGaugesKeys()
 	for _, vkey := range gaugesKeys {
-		vv, err := a.Repo.GetGauge(vkey)
+		vv, err := repo.GetGauge(vkey)
 
 		if err == nil {
 			metrics = append(metrics, models.Metrics{
@@ -73,10 +186,10 @@ func (a Agent) makeMetrics() ([]models.Metrics, []error) {
 
 	}
 
-	countersKeys := a.Repo.GetCountersKeys()
+	countersKeys := repo.GetCountersKeys()
 	for _, vkey := range countersKeys {
 
-		vv, err := a.Repo.GetCounter(vkey)
+		vv, err := repo.GetCounter(vkey)
 
 		if err == nil {
 			metrics = append(metrics, models.Metrics{
@@ -92,7 +205,7 @@ func (a Agent) makeMetrics() ([]models.Metrics, []error) {
 	return metrics, errors
 }
 
-func (a Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
+func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 
 	errors := make([]error, 0)
 	//var request *http.Request
@@ -142,15 +255,15 @@ func (a Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 
 }
 
-func (a Agent) SendAll() []error {
+func (a *Agent) SendAll(metrics []models.Metrics) []error {
 
 	errors := make([]error, 0)
 
 	client := http.Client{}
 
-	metrics, errors1 := a.makeMetrics()
+	//metrics, errors1 := a.makeMetrics()
 
-	errors = append(errors, errors1...)
+	//errors = append(errors, errors1...)
 
 	request, errors2 := a.makeRequest(metrics)
 	errors = append(errors, errors2...)
@@ -247,7 +360,7 @@ func (a Agent) SendAll() []error {
 
 }
 
-func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []error) []error {
+func (a *Agent) work1(metricOut *models.Metrics, client *http.Client, errors []error) []error {
 	metricJSON, err := json.Marshal(metricOut)
 	if err != nil {
 		errors = append(errors, err)
@@ -318,7 +431,7 @@ func (a Agent) work1(metricOut *models.Metrics, client *http.Client, errors []er
 	return errors
 }
 
-func (a Agent) Send() []error {
+func (a *Agent) Send() []error {
 
 	errors := make([]error, 0)
 
@@ -362,7 +475,7 @@ func (a Agent) Send() []error {
 	//для каунтера
 }
 
-func (a Agent) Add(memStats *runtime.MemStats) {
+func (a *Agent) Add(memStats *runtime.MemStats) {
 
 	a.Repo.UpdateGauge("Alloc", float64(memStats.Alloc))
 	a.Repo.UpdateGauge("BuckHashSys", float64(memStats.BuckHashSys))
@@ -394,4 +507,17 @@ func (a Agent) Add(memStats *runtime.MemStats) {
 	a.Repo.UpdateGauge("Sys", float64(memStats.Sys))
 	a.Repo.UpdateGauge("TotalAlloc", float64(memStats.TotalAlloc))
 
+}
+
+func (a *Agent) worker(id int, jobs <-chan []models.Metrics) {
+	for j := range jobs {
+		// для наглядности будем выводить какой рабочий начал работу и его задачу
+		fmt.Println("рабочий", id, "запущен задача", j)
+		// немного замедлим выполнение рабочего
+		a.SendAll(j)
+		// для наглядности выводим какой рабочий завершил какую задачу
+		fmt.Println("рабочий", id, "закончил задача", j)
+		// отправляем результат в канал результатов
+		//results <- j + 1
+	}
 }
