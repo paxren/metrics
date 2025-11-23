@@ -49,7 +49,7 @@ func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	logFn := func(res http.ResponseWriter, req *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
 		// который будем передавать следующей функции
-		var errHash bool = false
+		errHash := false
 		// проверяем, что клиент умеет получать от сервера сжатые данные в формате gzip
 
 		//TUT OHIBKA
@@ -78,8 +78,8 @@ func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 			if hashString != hash {
 				fmt.Println("will returning error")
 				errHash = true
-				// http.Error(res, "не совпал хеш", http.StatusBadRequest)
-				// return
+				http.Error(res, "не совпал хеш", http.StatusBadRequest)
+				return
 			}
 		}
 
