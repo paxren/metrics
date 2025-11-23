@@ -7,7 +7,6 @@ import (
 
 	"github.com/paxren/metrics/internal/agent"
 	"github.com/paxren/metrics/internal/config"
-	"github.com/paxren/metrics/internal/repository"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -122,7 +121,26 @@ func main() {
 
 	//var memStats runtime.MemStats
 
-	agent := agent.NewAgentExtended(repository.MakeMemStorage(), *hostAdress, key, rateLimit, pollInterval, reportInterval)
+	agent := agent.NewAgentExtended(*hostAdress, key, rateLimit, pollInterval, reportInterval)
+
+	// v, _ := mem.VirtualMemory()
+	// c, _ := cpu.Percent(time.Second, true)
+
+	// //i := cpu.InfoStat{}
+	// //ii, _ := cpu.Times(true)
+
+	// // almost every return value is a struct
+	// fmt.Printf("Total: %v, Free:%v\n", v.Total, v.Free)
+	// fmt.Printf("cpu %v\n", c)
+	// //fmt.Printf("cpu2 %v\n cpu3 %v \n", i, ii)
+	// time.Sleep(time.Second * 15)
+	// v, _ = mem.VirtualMemory()
+	// c, _ = cpu.Percent(time.Second, true)
+	// fmt.Printf("Total: %v, Free:%v\n", v.Total, v.Free)
+	// fmt.Printf("cpu %v\n", c)
+	// // convert to JSON. String() is also implemented
+	// //fmt.Println(v)
+	// os.Exit(1)
 
 	agent.Start()
 	// var PollCount int64

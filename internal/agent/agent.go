@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,12 +21,16 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 const numJobs = 5
 
 type Agent struct {
 	Repo           repository.Repository
+	RepoExt        repository.Repository
 	host           config.HostAddress
 	hashKey        string
 	hashKeyBytes   []byte
@@ -45,9 +50,10 @@ type Agent struct {
 
 // оставлено для совместимости с тестами
 // всё равно сломал?
-func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
+func NewAgent(host config.HostAddress) *Agent {
 	agent := &Agent{
-		Repo:           r,
+		Repo:           repository.MakeMemStorage(),
+		RepoExt:        repository.MakeMemStorage(),
 		host:           host,
 		hashKey:        "",
 		hashKeyBytes:   nil,
@@ -64,10 +70,10 @@ func NewAgent(r repository.Repository, host config.HostAddress) *Agent {
 	return agent
 }
 
-func NewAgentExtended(r repository.Repository, host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64) *Agent {
+func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64) *Agent {
 
-	fmt.Println("======dfsdfs==========")
-	agent := NewAgent(r, host)
+	//fmt.Println("======dfsdfs==========")
+	agent := NewAgent(host)
 
 	var hashKeyBytes []byte = nil
 	if key != "" {
@@ -89,7 +95,7 @@ func NewAgentExtended(r repository.Repository, host config.HostAddress, key stri
 		agent.reportInterval = reportInterval
 	}
 
-	fmt.Printf("agent %v\n", agent)
+	//fmt.Printf("agent %v\n", agent)
 	//agent.startWorkers()
 
 	return agent
@@ -119,6 +125,7 @@ func (a *Agent) Start() {
 		}
 
 		go a.startPoll(a.Repo, a.pollStdMetrics)
+		go a.startPoll(a.RepoExt, a.pollExtMetrics)
 		//go a.startPoll(a.RepoExt, a.pollExtMetrics)
 
 		<-a.done
@@ -141,6 +148,21 @@ func (a *Agent) pollStdMetrics(repo repository.Repository) {
 	//fmt.Printf("memstorage: %v \r\n", test1)
 	a.Add(&a.memStats)
 
+}
+
+func (a *Agent) pollExtMetrics(repo repository.Repository) {
+
+	fmt.Println("собираю расширенные данные")
+
+	memory, _ := mem.VirtualMemory()
+	cpu, _ := cpu.Percent(time.Second, true)
+
+	for i, v := range cpu {
+		repo.UpdateGauge("CPUutilization"+strconv.Itoa(i), v)
+	}
+
+	repo.UpdateGauge("TotalMemory", float64(memory.Total))
+	repo.UpdateGauge("FreeMemory", float64(memory.Free))
 }
 
 func (a *Agent) startPoll(repo repository.Repository, fn func(repository.Repository)) {
