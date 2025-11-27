@@ -142,7 +142,8 @@ func main() {
 	// //fmt.Println(v)
 	// os.Exit(1)
 
-	agent.Start()
+	done := agent.Start()
+	<-done
 	// var PollCount int64
 	// var randFloat float64
 	//var test int64

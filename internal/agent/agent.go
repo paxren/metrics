@@ -107,7 +107,7 @@ func (a *Agent) Finish() {
 	close(a.done)
 }
 
-func (a *Agent) Start() {
+func (a *Agent) Start() <-chan struct{} {
 
 	//TODO проверка на единоразовость (once?)
 
@@ -134,9 +134,8 @@ func (a *Agent) Start() {
 
 		//go a.startPoll(a.RepoExt, a.pollExtMetrics)
 
-		<-a.done
 	})
-
+	return a.done
 }
 
 func (a *Agent) pollStdMetrics(repo repository.Repository) {
@@ -161,7 +160,7 @@ func (a *Agent) pollExtMetrics(repo repository.Repository) {
 	fmt.Println("собираю расширенные данные")
 
 	memory, _ := mem.VirtualMemory()
-	cpu, _ := cpu.Percent(time.Second, true)
+	cpu, _ := cpu.Percent(10*time.Millisecond, true)
 
 	for i, v := range cpu {
 		repo.UpdateGauge("CPUutilization"+strconv.Itoa(i), v)
