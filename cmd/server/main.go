@@ -68,6 +68,17 @@ func main() {
 	if serverConfig.DatabaseDSN != "" {
 
 		pstorage, err := repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
+
+		if err != nil {
+			// вызываем панику, если ошибка
+			sugar.Fatal(
+				"Storage init1",
+				"Storage obj", pstorage,
+				"err", pstorage,
+			)
+			//panic("cannot initialize postgress")
+		}
+		mutexed, err := repository.MakeMutexedRegistry(pstorage)
 		if err != nil {
 			// вызываем панику, если ошибка
 			sugar.Fatal(
@@ -83,11 +94,12 @@ func main() {
 			"postgresStorage obj", pstorage,
 		)
 
-		storage = pstorage
+		//storage = pstorage
+		storage = mutexed
 
 		finish = append(finish, pstorage.Close)
 	} else {
-		mstorage := repository.MakeMemStorage()
+		mstorage := repository.MakeConcurentMemStorage()
 		//работа с файлами
 		savedStorage := repository.MakeSavedRepo(mstorage, serverConfig.FileStoragePath, serverConfig.StoreInterval)
 		sugar.Infow(
