@@ -47,7 +47,7 @@ func init() {
 	flag.Int64Var(&paramReportInterval, "r", 10, "reportInterval")
 	flag.Int64Var(&paramPollInterval, "p", 2, "pollInterval")
 	flag.Int64Var(&paramRateLimit, "l", 1, "rateLimit")
-	flag.StringVar(&paramKey, "k", "", "pollInterval")
+	flag.StringVar(&paramKey, "k", "", "hashKey")
 }
 
 func main() {

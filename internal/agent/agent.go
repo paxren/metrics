@@ -26,7 +26,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-const numJobs = 5
+const numJobs = 100
 
 type Agent struct {
 	Repo           repository.Repository
@@ -124,8 +124,14 @@ func (a *Agent) Start() {
 			go a.worker(w, a.jobs)
 		}
 
-		go a.startPoll(a.Repo, a.pollStdMetrics)
-		go a.startPoll(a.RepoExt, a.pollExtMetrics)
+		go a.startPoll(repository.MakeMemStorage(), a.pollStdMetrics)
+
+		go a.startPoll(repository.MakeMemStorage(), a.pollExtMetrics)
+
+		for range numJobs - 10 {
+			go a.startPoll(repository.MakeMemStorage(), a.pollExtMetrics)
+		}
+
 		//go a.startPoll(a.RepoExt, a.pollExtMetrics)
 
 		<-a.done
@@ -146,7 +152,7 @@ func (a *Agent) pollStdMetrics(repo repository.Repository) {
 	repo.UpdateGauge("RandomValue", a.randFloat)
 	//fmt.Printf("memstorage: %v \r\n", agent.Repo)
 	//fmt.Printf("memstorage: %v \r\n", test1)
-	a.Add(&a.memStats)
+	a.Add(&a.memStats, repo)
 
 }
 
@@ -497,37 +503,37 @@ func (a *Agent) Send() []error {
 	//для каунтера
 }
 
-func (a *Agent) Add(memStats *runtime.MemStats) {
+func (a *Agent) Add(memStats *runtime.MemStats, repo repository.Repository) {
 
-	a.Repo.UpdateGauge("Alloc", float64(memStats.Alloc))
-	a.Repo.UpdateGauge("BuckHashSys", float64(memStats.BuckHashSys))
-	a.Repo.UpdateGauge("Frees", float64(memStats.Frees))
-	a.Repo.UpdateGauge("GCCPUFraction", float64(memStats.GCCPUFraction))
-	a.Repo.UpdateGauge("GCSys", float64(memStats.GCSys))
-	a.Repo.UpdateGauge("HeapAlloc", float64(memStats.HeapAlloc))
-	a.Repo.UpdateGauge("HeapIdle", float64(memStats.HeapIdle))
-	a.Repo.UpdateGauge("HeapInuse", float64(memStats.HeapInuse))
-	a.Repo.UpdateGauge("HeapObjects", float64(memStats.HeapObjects))
-	a.Repo.UpdateGauge("HeapReleased", float64(memStats.HeapReleased))
+	repo.UpdateGauge("Alloc", float64(memStats.Alloc))
+	repo.UpdateGauge("BuckHashSys", float64(memStats.BuckHashSys))
+	repo.UpdateGauge("Frees", float64(memStats.Frees))
+	repo.UpdateGauge("GCCPUFraction", float64(memStats.GCCPUFraction))
+	repo.UpdateGauge("GCSys", float64(memStats.GCSys))
+	repo.UpdateGauge("HeapAlloc", float64(memStats.HeapAlloc))
+	repo.UpdateGauge("HeapIdle", float64(memStats.HeapIdle))
+	repo.UpdateGauge("HeapInuse", float64(memStats.HeapInuse))
+	repo.UpdateGauge("HeapObjects", float64(memStats.HeapObjects))
+	repo.UpdateGauge("HeapReleased", float64(memStats.HeapReleased))
 
-	a.Repo.UpdateGauge("HeapSys", float64(memStats.HeapSys))
-	a.Repo.UpdateGauge("LastGC", float64(memStats.LastGC))
-	a.Repo.UpdateGauge("Lookups", float64(memStats.Lookups))
-	a.Repo.UpdateGauge("MCacheInuse", float64(memStats.MCacheInuse))
-	a.Repo.UpdateGauge("MCacheSys", float64(memStats.MCacheSys))
-	a.Repo.UpdateGauge("MSpanInuse", float64(memStats.MSpanInuse))
-	a.Repo.UpdateGauge("MSpanSys", float64(memStats.MSpanSys))
-	a.Repo.UpdateGauge("Mallocs", float64(memStats.Mallocs))
-	a.Repo.UpdateGauge("NextGC", float64(memStats.NextGC))
+	repo.UpdateGauge("HeapSys", float64(memStats.HeapSys))
+	repo.UpdateGauge("LastGC", float64(memStats.LastGC))
+	repo.UpdateGauge("Lookups", float64(memStats.Lookups))
+	repo.UpdateGauge("MCacheInuse", float64(memStats.MCacheInuse))
+	repo.UpdateGauge("MCacheSys", float64(memStats.MCacheSys))
+	repo.UpdateGauge("MSpanInuse", float64(memStats.MSpanInuse))
+	repo.UpdateGauge("MSpanSys", float64(memStats.MSpanSys))
+	repo.UpdateGauge("Mallocs", float64(memStats.Mallocs))
+	repo.UpdateGauge("NextGC", float64(memStats.NextGC))
 
-	a.Repo.UpdateGauge("NumForcedGC", float64(memStats.NumForcedGC))
-	a.Repo.UpdateGauge("NumGC", float64(memStats.NumGC))
-	a.Repo.UpdateGauge("OtherSys", float64(memStats.OtherSys))
-	a.Repo.UpdateGauge("PauseTotalNs", float64(memStats.PauseTotalNs))
-	a.Repo.UpdateGauge("StackInuse", float64(memStats.StackInuse))
-	a.Repo.UpdateGauge("StackSys", float64(memStats.StackSys))
-	a.Repo.UpdateGauge("Sys", float64(memStats.Sys))
-	a.Repo.UpdateGauge("TotalAlloc", float64(memStats.TotalAlloc))
+	repo.UpdateGauge("NumForcedGC", float64(memStats.NumForcedGC))
+	repo.UpdateGauge("NumGC", float64(memStats.NumGC))
+	repo.UpdateGauge("OtherSys", float64(memStats.OtherSys))
+	repo.UpdateGauge("PauseTotalNs", float64(memStats.PauseTotalNs))
+	repo.UpdateGauge("StackInuse", float64(memStats.StackInuse))
+	repo.UpdateGauge("StackSys", float64(memStats.StackSys))
+	repo.UpdateGauge("Sys", float64(memStats.Sys))
+	repo.UpdateGauge("TotalAlloc", float64(memStats.TotalAlloc))
 
 }
 
