@@ -94,6 +94,12 @@ func TestAgent_Send(t *testing.T) {
 	// Create a test server to handle the HTTP requests with JSON and gzip support
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the request path matches the expected pattern
+		if r.URL.Path != "/update" {
+			t.Errorf("Expected path /update, got %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST request, got %s", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -272,7 +278,9 @@ func TestAgent_Send(t *testing.T) {
 				// Parse the test server URL to get host and port
 				parts := server.URL[7:] // Remove "http://" prefix
 				hostAddr := config.NewHostAddress()
-				hostAddr.Set(parts)
+				if err := hostAddr.Set(parts); err != nil {
+					t.Fatalf("Failed to set host address: %v", err)
+				}
 				tt.host = *hostAddr
 			}
 
@@ -325,7 +333,7 @@ func TestAgent_Add(t *testing.T) {
 			a.Repo = tt.repo
 
 			// Call Add method
-			a.Add(tt.memStats)
+			a.Add(tt.memStats, tt.repo)
 
 			// Verify that gauges were added to the repository
 			gaugesKeys := tt.repo.GetGaugesKeys()
