@@ -94,6 +94,12 @@ func TestAgent_Send(t *testing.T) {
 	// Create a test server to handle the HTTP requests with JSON and gzip support
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if the request path matches the expected pattern
+		if r.URL.Path != "/update" {
+			t.Errorf("Expected path /update, got %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		if r.Method != http.MethodPost {
 			t.Errorf("Expected POST request, got %s", r.Method)
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -165,9 +171,7 @@ func TestAgent_Send(t *testing.T) {
 	defer server.Close()
 
 	// Extract host and port from the test server URL
-	hostAddr := config.NewHostAddress()
-	hostAddr.Host = "localhost"
-	hostAddr.Port = 8080 // We'll use this in tests that don't use the test server
+	defaultHost := config.NewHostAddress()
 
 	tests := []struct {
 		name          string
@@ -180,14 +184,14 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Empty repository",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  0,
 			useTestServer: true,
 		},
 		{
 			name:          "Repository with gauges only",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  0,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -199,7 +203,7 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Repository with counters only",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  0,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -211,7 +215,7 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Repository with both gauges and counters",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  0,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -225,7 +229,7 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Repository with gauge retrieval errors",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  1,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -237,7 +241,7 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Repository with counter retrieval errors",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  1,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -249,7 +253,7 @@ func TestAgent_Send(t *testing.T) {
 		{
 			name:          "Repository with mixed errors",
 			repo:          NewMockRepository(),
-			host:          *hostAddr,
+			host:          *defaultHost,
 			wantErrCount:  2,
 			useTestServer: true,
 			setupRepo: func(r repository.Repository) {
@@ -274,12 +278,16 @@ func TestAgent_Send(t *testing.T) {
 				// Parse the test server URL to get host and port
 				parts := server.URL[7:] // Remove "http://" prefix
 				hostAddr := config.NewHostAddress()
-				hostAddr.Set(parts)
+				if err := hostAddr.Set(parts); err != nil {
+					t.Fatalf("Failed to set host address: %v", err)
+				}
 				tt.host = *hostAddr
 			}
 
 			// Create agent with the test repository
-			a := NewAgent(tt.repo, tt.host)
+			a := NewAgent(tt.host)
+			// Set the repository manually since NewAgent doesn't accept it as parameter
+			a.Repo = tt.repo
 
 			// Call Send method
 			got := a.Send()
@@ -320,10 +328,12 @@ func TestAgent_Add(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := NewAgent(tt.repo, tt.host)
+			a := NewAgent(tt.host)
+			// Set the repository manually since NewAgent doesn't accept it as parameter
+			a.Repo = tt.repo
 
 			// Call Add method
-			a.Add(tt.memStats)
+			a.Add(tt.memStats, tt.repo)
 
 			// Verify that gauges were added to the repository
 			gaugesKeys := tt.repo.GetGaugesKeys()

@@ -16,6 +16,8 @@ cmd/agent/main
 cmd/agent/agent
 cmd/server/main
 cmd/server/server
+cmd/server/load_repo
+cmd/server/save_repo
 
 bin/*
 
@@ -25,3 +27,7 @@ vendor/
 # IDEs directories
 .idea
 .vscode
+
+agent
+server
+save_file

@@ -264,13 +264,18 @@ func (h Handler) UpdateJSON(res http.ResponseWriter, req *http.Request) {
 
 func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 
+	fmt.Println("===handlers start updates")
+	defer fmt.Println("===handlers finish updates")
+
 	if req.Method != http.MethodPost {
 		res.WriteHeader(http.StatusMethodNotAllowed)
+		fmt.Println("-=UpdatesJSON:   err http.MethodPost")
 		return
 	}
 
 	if req.Header.Get("Content-Type") != "application/json" {
 		res.WriteHeader(http.StatusResetContent)
+		fmt.Println("-=UpdatesJSON:   err req.Header.Get Content-Type...")
 		return
 	}
 
@@ -283,11 +288,13 @@ func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
+		fmt.Println("-=UpdatesJSON:   err ReadFrom(req.Body)")
 		return
 	}
 	// десериализуем JSON в Metric
 	if err = json.Unmarshal(buf.Bytes(), &metrics); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
+		fmt.Println("-=UpdatesJSON:   err json.Unmarshal")
 		return
 	}
 
@@ -330,7 +337,9 @@ func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	fmt.Println("   before status ok")
 	res.WriteHeader(http.StatusOK)
+	fmt.Println("   after status ok")
 }
 
 func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {

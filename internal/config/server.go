@@ -14,6 +14,7 @@ type ServerConfigEnv struct {
 	DatabaseDSN     string      `env:"DATABASE_DSN,notEmpty"`
 	Restore         bool        `env:"RESTORE,notEmpty"`
 	Address         HostAddress `env:"ADDRESS,notEmpty"`
+	Key             string      `env:"KEY,notEmpty"`
 }
 
 type ServerConfig struct {
@@ -22,12 +23,14 @@ type ServerConfig struct {
 	StoreInterval   uint64
 	FileStoragePath string
 	DatabaseDSN     string
+	Key             string
 	Restore         bool
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
 	paramFileStoragePath string
 	paramDatabaseDSN     string
+	paramKey             string
 	paramRestore         bool
 }
 
@@ -54,6 +57,7 @@ func (se *ServerConfig) Init() {
 	flag.Uint64Var(&se.paramStoreInterval, "i", 300, "storeInterval")
 	flag.StringVar(&se.paramFileStoragePath, "f", "save_file", "fileStoragePath")
 	flag.StringVar(&se.paramDatabaseDSN, "d", "", "fileStoragePath")
+	flag.StringVar(&se.paramKey, "k", "", "key for hash")
 	flag.BoolVar(&se.paramRestore, "r", false, "paramRestore")
 
 	// fmt.Println("======AFTER PARAMS PARSE-----")
@@ -180,6 +184,14 @@ func (se *ServerConfig) Parse() {
 		se.DatabaseDSN = se.envs.DatabaseDSN
 	} else {
 		se.DatabaseDSN = se.paramDatabaseDSN
+	}
+
+	_, ok1 = problemVars["KEY"]
+	_, ok2 = problemVars["Key"]
+	if !ok1 && !ok2 {
+		se.Key = se.envs.Key
+	} else {
+		se.Key = se.paramKey
 	}
 	// fmt.Println("======RESULT-----")
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
