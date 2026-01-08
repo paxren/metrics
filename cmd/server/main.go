@@ -155,37 +155,17 @@ func main() {
 		auditObservers = append(auditObservers, urlObserver)
 	}
 
+	// Создаём аудитор
+	auditor := handler.NewAuditor(auditObservers)
+
 	r := chi.NewRouter()
 
-	// Применяем middleware только к эндпоинтам обновления метрик
-	if len(auditObservers) > 0 {
-		r.With(
-			handler.AuditMiddleware(auditObservers),
-		).Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
-
-		r.With(
-			handler.AuditMiddleware(auditObservers),
-		).Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-
-		r.With(
-			handler.AuditMiddleware(auditObservers),
-		).Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-
-		r.With(
-			handler.AuditMiddleware(auditObservers),
-		).Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
-
-		r.With(
-			handler.AuditMiddleware(auditObservers),
-		).Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
-	} else {
-		// Если аудит отключён, используем стандартные роуты
-		r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
-		r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-		r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-		r.Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
-		r.Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
-	}
+	// Применяем middleware ко всем эндпоинтам обновления метрик
+	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
+	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
 
 	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
 	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))

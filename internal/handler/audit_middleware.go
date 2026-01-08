@@ -33,47 +33,51 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// AuditMiddleware создаёт middleware для аудита запросов
-func AuditMiddleware(observers []audit.Observer) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Извлекаем метрики из запроса
-			var metrics []string
-			var bodyBytes []byte
+// WithAudit создаёт middleware для аудита запросов
+func (a *Auditor) WithAudit(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Если нет наблюдателей, просто передаем управление дальше
+		if len(a.observers) == 0 {
+			h(w, r)
+			return
+		}
 
-			// Сохраняем тело запроса для последующего восстановления
-			if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" {
-				var err error
-				bodyBytes, err = io.ReadAll(r.Body)
-				if err == nil {
-					// Восстанавливаем тело запроса для следующих обработчиков
-					r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		// Извлекаем метрики из запроса
+		var metrics []string
+		var bodyBytes []byte
 
-					// Извлекаем метрики из тела запроса
-					metrics = extractMetricsFromJSON(bodyBytes, r.URL.Path)
-				}
-			} else {
-				// Извлекаем метрики из URL для не-JSON запросов
-				metrics = extractMetricsFromURL(r.URL.Path)
+		// Сохраняем тело запроса для последующего восстановления
+		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" {
+			var err error
+			bodyBytes, err = io.ReadAll(r.Body)
+			if err == nil {
+				// Восстанавливаем тело запроса для следующих обработчиков
+				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+				// Извлекаем метрики из тела запроса
+				metrics = extractMetricsFromJSON(bodyBytes, r.URL.Path)
 			}
+		} else {
+			// Извлекаем метрики из URL для не-JSON запросов
+			metrics = extractMetricsFromURL(r.URL.Path)
+		}
 
-			// Создаём обёртку для ResponseWriter
-			wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		// Создаём обёртку для ResponseWriter
+		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
-			// Выполняем основной обработчик
-			next.ServeHTTP(wrapped, r)
+		// Выполняем основной обработчик
+		h(wrapped, r)
 
-			// Если запрос успешный (статус 2xx) и есть метрики для аудита
-			if wrapped.status >= 200 && wrapped.status < 300 && len(metrics) > 0 {
-				// Создаём событие аудита
-				event := models.NewAuditEvent(metrics, getIPFromRequest(r))
+		// Если запрос успешный (статус 2xx) и есть метрики для аудита
+		if wrapped.status >= 200 && wrapped.status < 300 && len(metrics) > 0 {
+			// Создаём событие аудита
+			event := models.NewAuditEvent(metrics, getIPFromRequest(r))
 
-				// Уведомляем наблюдателей
-				for _, observer := range observers {
-					observer.Notify(event) // Игнорируем ошибки, чтобы не прерывать обработку
-				}
+			// Уведомляем наблюдателей
+			for _, observer := range a.observers {
+				observer.Notify(event) // Игнорируем ошибки, чтобы не прерывать обработку
 			}
-		})
+		}
 	}
 }
 
