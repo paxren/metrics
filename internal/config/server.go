@@ -15,6 +15,8 @@ type ServerConfigEnv struct {
 	Restore         bool        `env:"RESTORE,notEmpty"`
 	Address         HostAddress `env:"ADDRESS,notEmpty"`
 	Key             string      `env:"KEY,notEmpty"`
+	AuditFile       string      `env:"AUDIT_FILE,notEmpty"`
+	AuditURL        string      `env:"AUDIT_URL,notEmpty"`
 }
 
 type ServerConfig struct {
@@ -25,6 +27,8 @@ type ServerConfig struct {
 	DatabaseDSN     string
 	Key             string
 	Restore         bool
+	AuditFile       string
+	AuditURL        string
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
@@ -32,6 +36,8 @@ type ServerConfig struct {
 	paramDatabaseDSN     string
 	paramKey             string
 	paramRestore         bool
+	paramAuditFile       string
+	paramAuditURL        string
 }
 
 func NewServerConfig() *ServerConfig {
@@ -59,6 +65,8 @@ func (se *ServerConfig) Init() {
 	flag.StringVar(&se.paramDatabaseDSN, "d", "", "fileStoragePath")
 	flag.StringVar(&se.paramKey, "k", "", "key for hash")
 	flag.BoolVar(&se.paramRestore, "r", false, "paramRestore")
+	flag.StringVar(&se.paramAuditFile, "audit-file", "", "path to audit file")
+	flag.StringVar(&se.paramAuditURL, "audit-url", "", "URL for audit logs")
 
 	// fmt.Println("======AFTER PARAMS PARSE-----")
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
@@ -192,6 +200,22 @@ func (se *ServerConfig) Parse() {
 		se.Key = se.envs.Key
 	} else {
 		se.Key = se.paramKey
+	}
+
+	_, ok1 = problemVars["AUDIT_FILE"]
+	_, ok2 = problemVars["AuditFile"]
+	if !ok1 && !ok2 {
+		se.AuditFile = se.envs.AuditFile
+	} else {
+		se.AuditFile = se.paramAuditFile
+	}
+
+	_, ok1 = problemVars["AUDIT_URL"]
+	_, ok2 = problemVars["AuditURL"]
+	if !ok1 && !ok2 {
+		se.AuditURL = se.envs.AuditURL
+	} else {
+		se.AuditURL = se.paramAuditURL
 	}
 	// fmt.Println("======RESULT-----")
 	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)

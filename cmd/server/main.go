@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
@@ -139,15 +140,55 @@ func main() {
 
 	hasher := handler.NewHasher(serverConfig.Key)
 
+	// Создаём наблюдателей для аудита
+	var auditObservers []audit.Observer
+
+	// Создаём наблюдателя для файла, если указан путь
+	if serverConfig.AuditFile != "" {
+		fileObserver := audit.NewFileObserver(serverConfig.AuditFile)
+		auditObservers = append(auditObservers, fileObserver)
+	}
+
+	// Создаём наблюдателя для URL, если указан URL
+	if serverConfig.AuditURL != "" {
+		urlObserver := audit.NewURLObserver(serverConfig.AuditURL)
+		auditObservers = append(auditObservers, urlObserver)
+	}
+
 	r := chi.NewRouter()
 
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
+	// Применяем middleware только к эндпоинтам обновления метрик
+	if len(auditObservers) > 0 {
+		r.With(
+			handler.AuditMiddleware(auditObservers),
+		).Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
+
+		r.With(
+			handler.AuditMiddleware(auditObservers),
+		).Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
+
+		r.With(
+			handler.AuditMiddleware(auditObservers),
+		).Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
+
+		r.With(
+			handler.AuditMiddleware(auditObservers),
+		).Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
+
+		r.With(
+			handler.AuditMiddleware(auditObservers),
+		).Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
+	} else {
+		// Если аудит отключён, используем стандартные роуты
+		r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
+		r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
+		r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
+		r.Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
+		r.Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
+	}
+
 	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
 	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-	r.Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))) //hasher.HashMiddleware(
-	r.Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
