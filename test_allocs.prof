@@ -1,0 +1,31 @@
+PeriodType: space bytes
+Period: 524288
+Time: 2026-01-08 16:49:57.660401839 +0500 +05
+Samples:
+alloc_objects/count alloc_space/bytes[dflt] inuse_objects/count inuse_space/bytes
+      32768     524296      32768     524296: 1 2 3 
+                bytes:[16]
+        256     525312        256     525312: 4 5 6 7 8 9 
+                bytes:[2048]
+        256     525312        256     525312: 4 5 6 10 11 12 13 14 15 
+                bytes:[2048]
+Locations
+     1: 0x699ec5 M=1 os/signal.NotifyContext /home/ak/apps/go/src/os/signal/signal.go:288:0 s=278
+     2: 0x8f4a98 M=1 main.main /home/ak/go_learn/metrics/cmd/server/main.go:36:0 s=33
+     3: 0x445cbc M=1 runtime.main /home/ak/apps/go/src/runtime/proc.go:285:0 s=148
+     4: 0x449bf0 M=1 runtime.allocm /home/ak/apps/go/src/runtime/proc.go:2325:0 s=2270
+     5: 0x44a674 M=1 runtime.newm /home/ak/apps/go/src/runtime/proc.go:2861:0 s=2848
+     6: 0x44ad58 M=1 runtime.startm /home/ak/apps/go/src/runtime/proc.go:3087:0 s=3026
+     7: 0x44b224 M=1 runtime.handoffp /home/ak/apps/go/src/runtime/proc.go:3128:0 s=3122
+     8: 0x44f550 M=1 runtime.entersyscallblock_handoff /home/ak/apps/go/src/runtime/proc.go:4764:0 s=4758
+     9: 0x481d09 M=1 runtime.systemstack /home/ak/apps/go/src/runtime/asm_amd64.s:513:0 s=482
+    10: 0x47be2b M=1 runtime.wakep /home/ak/apps/go/src/runtime/proc.go:3234:0 s=3203
+    11: 0x44d4bd M=1 runtime.resetspinning /home/ak/apps/go/src/runtime/proc.go:4008:0 s=3995
+    12: 0x44d9c9 M=1 runtime.schedule /home/ak/apps/go/src/runtime/proc.go:4161:0 s=4109
+    13: 0x44932c M=1 runtime.mstart1 /home/ak/apps/go/src/runtime/proc.go:1935:0 s=1897
+    14: 0x449234 M=1 runtime.mstart0 /home/ak/apps/go/src/runtime/proc.go:1881:0 s=1855
+    15: 0x481c04 M=1 runtime.mstart /home/ak/apps/go/src/runtime/asm_amd64.s:395:0 s=394
+Mappings
+1: 0x400000/0x960000/0x0 /home/ak/go_learn/metrics/server 2a1eef82f16cedc54f7144b5e42401a3e9656272 [FN]
+2: 0x7fff919fc000/0x7fff919fe000/0x0 [vdso]  [FN]
+3: 0xffffffffff600000/0xffffffffff601000/0x0 [vsyscall]  [FN]

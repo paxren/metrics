@@ -10,6 +10,11 @@ import (
 	"github.com/paxren/metrics/internal/models"
 )
 
+// FileSaver реализует сохранение метрик в файл с периодическим автоматическим сохранением.
+//
+// Оборачивает другое хранилище (Repository) и добавляет функциональность
+// сохранения всех метрик в файл в формате JSON.
+// Поддерживает автоматическое сохранение с заданным интервалом.
 type FileSaver struct {
 	saver  *os.File
 	ticker *time.Ticker
@@ -17,9 +22,23 @@ type FileSaver struct {
 	fileName string
 }
 
+// MakeSavedRepo создаёт новое хранилище с поддержкой сохранения в файл.
+//
+// Если интервал больше 0, запускается горутина для периодического сохранения.
+//
+// Параметры:
+//   - repo: базовое хранилище метрик
+//   - fileName: имя файла для сохранения метрик
+//   - interval: интервал автоматического сохранения в секундах (0 - отключить)
+//
+// Возвращает:
+//   - *FileSaver: указатель на созданное хранилище
+//
+// Пример использования:
+//
+//	storage := MakeMemStorage()
+//	fileStorage := MakeSavedRepo(storage, "metrics.json", 300) // сохранять каждые 5 минут
 func MakeSavedRepo(repo Repository, fileName string, interval uint64) *FileSaver {
-
-	//Ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
 
 	var ticker *time.Ticker = nil
 	if interval != 0 {
@@ -40,6 +59,9 @@ func MakeSavedRepo(repo Repository, fileName string, interval uint64) *FileSaver
 	return fs
 }
 
+// saveOnTicker запускает горутину для периодического сохранения метрик.
+//
+// Работает до остановки ticker.
 func (fs *FileSaver) saveOnTicker() {
 	for range fs.ticker.C {
 		//тут не обрабатываются ошибки сейва
@@ -47,6 +69,16 @@ func (fs *FileSaver) saveOnTicker() {
 	}
 }
 
+// Load загружает метрики из файла в базовое хранилище.
+//
+// Читает файл в формате JSON и восстанавливает метрики в хранилище.
+// Существующие метрики с теми же именами будут перезаписаны.
+//
+// Параметры:
+//   - fileName: имя файла для загрузки метрик
+//
+// Возвращает:
+//   - error: ошибка при загрузке, если она произошла
 func (fs *FileSaver) Load(fileName string) error {
 
 	data, err := os.ReadFile(fileName)
@@ -73,10 +105,16 @@ func (fs *FileSaver) Load(fileName string) error {
 		}
 	}
 
-	//fmt.Println(fs.repo)
 	return nil
 }
 
+// Save сохраняет все метрики из базового хранилища в файл.
+//
+// Сохраняет метрики в формате JSON с отступами для читаемости.
+// Если файл существует, он будет перезаписан.
+//
+// Возвращает:
+//   - error: ошибка при сохранении, если она произошла
 func (fs *FileSaver) Save() error {
 	fw, err := os.Create(fs.fileName)
 	if err != nil {
@@ -133,6 +171,16 @@ func (fs *FileSaver) Save() error {
 
 }
 
+// UpdateGauge обновляет или создаёт метрику типа gauge с указанным именем и значением.
+//
+// Если автоматическое сохранение отключено (interval = 0), выполняет немедленное сохранение.
+//
+// Параметры:
+//   - key: имя метрики
+//   - value: новое значение метрики
+//
+// Возвращает:
+//   - error: ошибка базового хранилища, если она произошла
 func (fs *FileSaver) UpdateGauge(key string, value float64) error {
 
 	err := fs.Repository.UpdateGauge(key, value)
@@ -145,6 +193,16 @@ func (fs *FileSaver) UpdateGauge(key string, value float64) error {
 	return err
 }
 
+// UpdateCounter обновляет или создаёт метрику типа counter, добавляя указанное значение к текущему.
+//
+// Если автоматическое сохранение отключено (interval = 0), выполняет немедленное сохранение.
+//
+// Параметры:
+//   - key: имя метрики
+//   - value: значение, которое нужно добавить к текущему
+//
+// Возвращает:
+//   - error: ошибка базового хранилища, если она произошла
 func (fs *FileSaver) UpdateCounter(key string, value int64) error {
 
 	err := fs.Repository.UpdateCounter(key, value)
