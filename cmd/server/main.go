@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
@@ -139,15 +140,40 @@ func main() {
 
 	hasher := handler.NewHasher(serverConfig.Key)
 
+	// Создаём наблюдателей для аудита
+	var auditObservers []audit.Observer
+
+	// Создаём наблюдателя для файла, если указан путь
+	if serverConfig.AuditFile != "" {
+		fileObserver := audit.NewFileObserverWithBufferSize(serverConfig.AuditFile, 1000)
+		auditObservers = append(auditObservers, fileObserver)
+	}
+
+	// Создаём наблюдателя для URL, если указан URL
+	if serverConfig.AuditURL != "" {
+		urlObserver := audit.NewURLObserverWithBufferSize(serverConfig.AuditURL, 500)
+		auditObservers = append(auditObservers, urlObserver)
+	}
+
+	// Создаём аудитор
+	auditor := handler.NewAuditor(auditObservers)
+
+	// Добавляем функцию завершения работы аудита в массив finish
+	if auditor != nil {
+		finish = append(finish, auditor.Close)
+	}
+
 	r := chi.NewRouter()
 
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
+	// Применяем middleware ко всем эндпоинтам обновления метрик
+	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
+	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
+
 	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
 	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-	r.Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))) //hasher.HashMiddleware(
-	r.Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
@@ -173,6 +199,7 @@ func main() {
 	//обработка сигтерм TODO добработать или переработать после понимания контекста и др
 	<-rootCtx.Done()
 	stop()
+
 	server.Shutdown(context.Background())
 	for _, f := range finish {
 		f()
