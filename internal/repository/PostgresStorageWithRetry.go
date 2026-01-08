@@ -11,11 +11,32 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+// PostgresStorageWithRetry реализует хранилище метрик в PostgreSQL с автоматическим повтором операций при временных ошибках.
+//
+// Оборачивает PostgresStorage и добавляет логику повторных попыток для операций,
+// которые могут завершиться с временной ошибкой (например, потеря соединения).
+// Использует PostgresErrorClassifier для определения, можно ли повторить операцию.
 type PostgresStorageWithRetry struct {
 	*PostgresStorage
 	classifier *PostgresErrorClassifier
 }
 
+// MakePostgresStorageWithRetry создаёт новое хранилище метрик в PostgreSQL с поддержкой повторов.
+//
+// Параметры:
+//   - con: строка подключения к базе данных в формате DSN
+//
+// Возвращает:
+//   - *PostgresStorageWithRetry: указатель на созданное хранилище
+//   - error: ошибка при подключении или миграции
+//
+// Пример использования:
+//
+//	storage, err := MakePostgresStorageWithRetry("host=localhost user=postgres password=postgres dbname=metrics sslmode=disable")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer storage.Close()
 func MakePostgresStorageWithRetry(con string) (*PostgresStorageWithRetry, error) {
 
 	repo, err := MakePostgresStorage(con)
@@ -30,6 +51,16 @@ func MakePostgresStorageWithRetry(con string) (*PostgresStorageWithRetry, error)
 	}, nil
 }
 
+// executeWithRetry выполняет функцию с повторными попытками при временных ошибках.
+//
+// Использует экспоненциальную задержку между попытками.
+// Повторяет только операции, которые классифицированы как временные ошибки.
+//
+// Параметры:
+//   - undateFn: функция для выполнения с повторами
+//
+// Возвращает:
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) executeWithRetry(undateFn func() error) error {
 	const maxRetries = 3
 	var lastErr error
@@ -60,6 +91,16 @@ func (ps *PostgresStorageWithRetry) executeWithRetry(undateFn func() error) erro
 	return fmt.Errorf("операция прервана после %d попыток: %w", maxRetries, lastErr)
 }
 
+// UpdateGauge обновляет или создаёт метрику типа gauge с указанным именем и значением.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Параметры:
+//   - key: имя метрики
+//   - value: новое значение метрики
+//
+// Возвращает:
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) UpdateGauge(key string, value float64) error {
 
 	var err1 error
@@ -73,6 +114,16 @@ func (ps *PostgresStorageWithRetry) UpdateGauge(key string, value float64) error
 
 }
 
+// UpdateCounter обновляет или создаёт метрику типа counter, добавляя указанное значение к текущему.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Параметры:
+//   - key: имя метрики
+//   - value: значение, которое нужно добавить к текущему
+//
+// Возвращает:
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) UpdateCounter(key string, value int64) error {
 
 	var err1 error
@@ -86,6 +137,16 @@ func (ps *PostgresStorageWithRetry) UpdateCounter(key string, value int64) error
 
 }
 
+// GetGauge возвращает значение метрики типа gauge по имени.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Параметры:
+//   - key: имя метрики
+//
+// Возвращает:
+//   - float64: значение метрики
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) GetGauge(key string) (float64, error) {
 
 	var err error
@@ -99,6 +160,16 @@ func (ps *PostgresStorageWithRetry) GetGauge(key string) (float64, error) {
 	return value, err
 }
 
+// GetCounter возвращает значение метрики типа counter по имени.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Параметры:
+//   - key: имя метрики
+//
+// Возвращает:
+//   - int64: значение метрики
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) GetCounter(key string) (int64, error) {
 
 	var err error
@@ -112,6 +183,12 @@ func (ps *PostgresStorageWithRetry) GetCounter(key string) (int64, error) {
 	return value, err
 }
 
+// Ping проверяет доступность базы данных.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Возвращает:
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) Ping() error {
 
 	var err1 error
@@ -126,6 +203,15 @@ func (ps *PostgresStorageWithRetry) Ping() error {
 
 }
 
+// MassUpdate обновляет множество метрик за одну операцию.
+//
+// Выполняет операцию с повторными попытками при временных ошибках.
+//
+// Параметры:
+//   - metrics: срез метрик для обновления
+//
+// Возвращает:
+//   - error: ошибка после всех попыток или nil при успехе
 func (ps *PostgresStorageWithRetry) MassUpdate(metrics []models.Metrics) error {
 
 	var err1 error
