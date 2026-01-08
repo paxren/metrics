@@ -17,6 +17,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"net/http/pprof"
+	_ "net/http/pprof"
 )
 
 var (
@@ -167,17 +170,31 @@ func main() {
 
 	// Применяем middleware ко всем эндпоинтам обновления метрик
 	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.GzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
-	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
 
-	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
+	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
+	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
-	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
+	r.Get(`/`, hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetMain)))
+
+	// Добавляем эндпоинты для pprof
+	//r.Handle("/debug/pprof/*", http.HandlerFunc(pprof.Index))
+	// Замените строку 186 на эти:
+	r.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+	r.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	r.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	r.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	r.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	r.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Handler("heap").ServeHTTP))
+	r.Handle("/debug/pprof/goroutine", http.HandlerFunc(pprof.Handler("goroutine").ServeHTTP))
+	r.Handle("/debug/pprof/block", http.HandlerFunc(pprof.Handler("block").ServeHTTP))
+	r.Handle("/debug/pprof/mutex", http.HandlerFunc(pprof.Handler("mutex").ServeHTTP))
+	r.Handle("/debug/pprof/allocs", http.HandlerFunc(pprof.Handler("allocs").ServeHTTP))
 
 	server := &http.Server{
 		Addr:    serverConfig.Address.String(),
