@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/paxren/metrics/internal/models"
 )
@@ -13,6 +14,8 @@ import (
 func TestURLObserver_Notify(t *testing.T) {
 	// Создаём тестовый сервер
 	receivedEvents := make([]*models.AuditEvent, 0)
+	var mu sync.Mutex
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var event models.AuditEvent
 		err := json.NewDecoder(r.Body).Decode(&event)
@@ -20,13 +23,18 @@ func TestURLObserver_Notify(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
+		mu.Lock()
 		receivedEvents = append(receivedEvents, &event)
+		mu.Unlock()
+
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
 	// Создаём наблюдателя
 	observer := NewURLObserver(server.URL)
+	defer observer.Close()
 
 	// Создаём тестовое событие
 	event := &models.AuditEvent{
@@ -41,7 +49,13 @@ func TestURLObserver_Notify(t *testing.T) {
 		t.Fatalf("Failed to notify observer: %v", err)
 	}
 
+	// Ждем некоторое время для асинхронной обработки
+	time.Sleep(100 * time.Millisecond)
+
 	// Проверяем, что событие было получено
+	mu.Lock()
+	defer mu.Unlock()
+
 	if len(receivedEvents) != 1 {
 		t.Fatalf("Expected 1 event, got %d", len(receivedEvents))
 	}
@@ -69,6 +83,7 @@ func TestURLObserver_ServerError(t *testing.T) {
 
 	// Создаём наблюдателя
 	observer := NewURLObserver(server.URL)
+	defer observer.Close()
 
 	// Создаём тестовое событие
 	event := &models.AuditEvent{
@@ -87,6 +102,7 @@ func TestURLObserver_ServerError(t *testing.T) {
 func TestURLObserver_InvalidURL(t *testing.T) {
 	// Создаём наблюдателя с невалидным URL
 	observer := NewURLObserver("http://invalid-url-that-does-not-exist.local")
+	defer observer.Close()
 
 	// Создаём тестовое событие
 	event := &models.AuditEvent{
@@ -95,10 +111,10 @@ func TestURLObserver_InvalidURL(t *testing.T) {
 		IPAddress: "192.168.0.42",
 	}
 
-	// Уведомляем наблюдателя - должна быть ошибка
+	// Уведомляем наблюдателя - не должно быть ошибки (асинхронная обработка)
 	err := observer.Notify(event)
-	if err == nil {
-		t.Error("Expected error for invalid URL, got nil")
+	if err != nil {
+		t.Errorf("Unexpected error for invalid URL (async processing): %v", err)
 	}
 }
 
@@ -125,6 +141,7 @@ func TestURLObserver_ConcurrentAccess(t *testing.T) {
 
 	// Создаём наблюдателя
 	observer := NewURLObserver(server.URL)
+	defer observer.Close()
 
 	// Количество горутин для конкурентной записи
 	numGoroutines := 10
@@ -156,6 +173,9 @@ func TestURLObserver_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 
+	// Ждем некоторое время для асинхронной обработки всех событий
+	time.Sleep(500 * time.Millisecond)
+
 	// Проверяем, что все события были получены
 	mu.Lock()
 	defer mu.Unlock()
@@ -163,5 +183,98 @@ func TestURLObserver_ConcurrentAccess(t *testing.T) {
 	expectedEvents := numGoroutines * numEvents
 	if len(receivedEvents) != expectedEvents {
 		t.Errorf("Expected %d events, got %d", expectedEvents, len(receivedEvents))
+	}
+}
+
+func TestURLObserver_QueueOverflow(t *testing.T) {
+	// Создаём тестовый сервер
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Имитируем медленный ответ
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Создаём наблюдателя с маленьким буфером
+	observer := NewURLObserverWithBufferSize(server.URL, 2)
+	defer observer.Close()
+
+	// Создаём тестовое событие
+	event := &models.AuditEvent{
+		TS:        1234567890,
+		Metrics:   []string{"Alloc"},
+		IPAddress: "192.168.0.42",
+	}
+
+	// Заполняем буфер
+	err := observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	err = observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	// Третий вызов должен вернуть ошибку переполнения
+	err = observer.Notify(event)
+	if err == nil {
+		t.Error("Expected queue overflow error, got nil")
+	}
+}
+
+func TestURLObserver_Close(t *testing.T) {
+	// Создаём тестовый сервер
+	receivedEvents := make([]*models.AuditEvent, 0)
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var event models.AuditEvent
+		err := json.NewDecoder(r.Body).Decode(&event)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		mu.Lock()
+		receivedEvents = append(receivedEvents, &event)
+		mu.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Создаём наблюдателя
+	observer := NewURLObserver(server.URL)
+
+	// Создаём тестовое событие
+	event := &models.AuditEvent{
+		TS:        1234567890,
+		Metrics:   []string{"Alloc"},
+		IPAddress: "192.168.0.42",
+	}
+
+	// Уведомляем наблюдателя
+	err := observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	// Закрываем наблюдателя
+	err = observer.Close()
+	if err != nil {
+		t.Fatalf("Failed to close observer: %v", err)
+	}
+
+	// Ждем некоторое время для обработки оставшихся событий
+	time.Sleep(100 * time.Millisecond)
+
+	// Проверяем, что событие было отправлено
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(receivedEvents) != 1 {
+		t.Errorf("Expected 1 event after close, got %d", len(receivedEvents))
 	}
 }

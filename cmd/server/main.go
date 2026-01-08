@@ -145,18 +145,23 @@ func main() {
 
 	// Создаём наблюдателя для файла, если указан путь
 	if serverConfig.AuditFile != "" {
-		fileObserver := audit.NewFileObserver(serverConfig.AuditFile)
+		fileObserver := audit.NewFileObserverWithBufferSize(serverConfig.AuditFile, 1000)
 		auditObservers = append(auditObservers, fileObserver)
 	}
 
 	// Создаём наблюдателя для URL, если указан URL
 	if serverConfig.AuditURL != "" {
-		urlObserver := audit.NewURLObserver(serverConfig.AuditURL)
+		urlObserver := audit.NewURLObserverWithBufferSize(serverConfig.AuditURL, 500)
 		auditObservers = append(auditObservers, urlObserver)
 	}
 
 	// Создаём аудитор
 	auditor := handler.NewAuditor(auditObservers)
+
+	// Добавляем функцию завершения работы аудита в массив finish
+	if auditor != nil {
+		finish = append(finish, auditor.Close)
+	}
 
 	r := chi.NewRouter()
 
@@ -194,6 +199,7 @@ func main() {
 	//обработка сигтерм TODO добработать или переработать после понимания контекста и др
 	<-rootCtx.Done()
 	stop()
+
 	server.Shutdown(context.Background())
 	for _, f := range finish {
 		f()

@@ -28,6 +28,16 @@ func NewAuditor(observers []audit.Observer) *Auditor {
 	}
 }
 
+func (a *Auditor) Close() error {
+	var lastErr error
+	for _, observer := range a.observers {
+		if err := observer.Close(); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)

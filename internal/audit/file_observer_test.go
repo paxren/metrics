@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/paxren/metrics/internal/models"
 )
@@ -19,6 +20,7 @@ func TestFileObserver_Notify(t *testing.T) {
 
 	// Создаём наблюдателя
 	observer := NewFileObserver(tmpFile.Name())
+	defer observer.Close()
 
 	// Создаём тестовое событие
 	event := &models.AuditEvent{
@@ -32,6 +34,9 @@ func TestFileObserver_Notify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to notify observer: %v", err)
 	}
+
+	// Ждем некоторое время для асинхронной обработки
+	time.Sleep(100 * time.Millisecond)
 
 	// Проверяем содержимое файла
 	data, err := os.ReadFile(tmpFile.Name())
@@ -69,6 +74,7 @@ func TestFileObserver_ConcurrentAccess(t *testing.T) {
 
 	// Создаём наблюдателя
 	observer := NewFileObserver(tmpFile.Name())
+	defer observer.Close()
 
 	// Количество горутин для конкурентной записи
 	numGoroutines := 10
@@ -100,6 +106,9 @@ func TestFileObserver_ConcurrentAccess(t *testing.T) {
 		<-done
 	}
 
+	// Ждем некоторое время для асинхронной обработки всех событий
+	time.Sleep(500 * time.Millisecond)
+
 	// Проверяем, что все события были записаны
 	data, err := os.ReadFile(tmpFile.Name())
 	if err != nil {
@@ -117,5 +126,88 @@ func TestFileObserver_ConcurrentAccess(t *testing.T) {
 	expectedLines := numGoroutines * numEvents
 	if lines != expectedLines {
 		t.Errorf("Expected %d lines, got %d", expectedLines, lines)
+	}
+}
+
+func TestFileObserver_QueueOverflow(t *testing.T) {
+	// Создаём временный файл
+	tmpFile, err := os.CreateTemp("", "audit_overflow_test_*.log")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	// Создаём наблюдателя с маленьким буфером
+	observer := NewFileObserverWithBufferSize(tmpFile.Name(), 2)
+	defer observer.Close()
+
+	// Создаём тестовое событие
+	event := &models.AuditEvent{
+		TS:        1234567890,
+		Metrics:   []string{"Alloc"},
+		IPAddress: "192.168.0.42",
+	}
+
+	// Заполняем буфер
+	err = observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	err = observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	// Третий вызов должен вернуть ошибку переполнения
+	err = observer.Notify(event)
+	if err == nil {
+		t.Error("Expected queue overflow error, got nil")
+	}
+}
+
+func TestFileObserver_Close(t *testing.T) {
+	// Создаём временный файл
+	tmpFile, err := os.CreateTemp("", "audit_close_test_*.log")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	// Создаём наблюдателя
+	observer := NewFileObserver(tmpFile.Name())
+
+	// Создаём тестовое событие
+	event := &models.AuditEvent{
+		TS:        1234567890,
+		Metrics:   []string{"Alloc"},
+		IPAddress: "192.168.0.42",
+	}
+
+	// Уведомляем наблюдателя
+	err = observer.Notify(event)
+	if err != nil {
+		t.Fatalf("Failed to notify observer: %v", err)
+	}
+
+	// Закрываем наблюдателя
+	err = observer.Close()
+	if err != nil {
+		t.Fatalf("Failed to close observer: %v", err)
+	}
+
+	// Ждем некоторое время для обработки оставшихся событий
+	time.Sleep(100 * time.Millisecond)
+
+	// Проверяем, что событие было записано
+	data, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Error("Expected data to be written after close")
 	}
 }
