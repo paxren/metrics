@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -51,10 +50,10 @@ func (l Logger) WithLogging(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// точка, где выполняется хендлер pingHandler
-		fmt.Println("===logger before serve hash")
+		// fmt.Println("===logger before serve hash")
 		h.ServeHTTP(&lw, r) // обслуживание оригинального запроса
 
-		fmt.Println("===logger after serve hash")
+		// fmt.Println("===logger after serve hash")
 		// Since возвращает разницу во времени между start
 		// и моментом вызова Since. Таким образом можно посчитать
 		// время выполнения запроса.

@@ -9,6 +9,10 @@ import (
 	"github.com/paxren/metrics/internal/models"
 )
 
+// FileObserver реализует наблюдателя, который записывает события аудита в файл.
+//
+// Использует буферизированный канал для асинхронной записи событий.
+// Каждое событие записывается в файл в формате JSON с новой строки.
 type FileObserver struct {
 	filePath  string
 	eventChan chan *models.AuditEvent
@@ -16,10 +20,34 @@ type FileObserver struct {
 	wg        sync.WaitGroup
 }
 
+// NewFileObserver создаёт новый наблюдатель с буфером по умолчанию (100 событий).
+//
+// Параметры:
+//   - filePath: путь к файлу для записи событий аудита
+//
+// Возвращает:
+//   - *FileObserver: указатель на созданного наблюдателя
+//
+// Пример использования:
+//
+//	observer := NewFileObserver("audit.log")
+//	defer observer.Close()
+//	event := NewAuditEvent([]string{"metric1"}, "192.168.1.1")
+//	observer.Notify(event)
 func NewFileObserver(filePath string) *FileObserver {
 	return NewFileObserverWithBufferSize(filePath, 100) // Буфер по умолчанию
 }
 
+// NewFileObserverWithBufferSize создаёт новый наблюдатель с указанным размером буфера.
+//
+// Запускает горутину для асинхронной обработки событий.
+//
+// Параметры:
+//   - filePath: путь к файлу для записи событий аудита
+//   - bufferSize: размер буфера для событий
+//
+// Возвращает:
+//   - *FileObserver: указатель на созданного наблюдателя
 func NewFileObserverWithBufferSize(filePath string, bufferSize int) *FileObserver {
 	f := &FileObserver{
 		filePath:  filePath,
@@ -33,6 +61,15 @@ func NewFileObserverWithBufferSize(filePath string, bufferSize int) *FileObserve
 	return f
 }
 
+// Notify отправляет событие в канал для обработки.
+//
+// Если канал переполнен, возвращает ошибку.
+//
+// Параметры:
+//   - event: событие аудита для записи
+//
+// Возвращает:
+//   - error: ошибка если канал переполнен
 func (f *FileObserver) Notify(event *models.AuditEvent) error {
 	select {
 	case f.eventChan <- event:
@@ -43,6 +80,9 @@ func (f *FileObserver) Notify(event *models.AuditEvent) error {
 	}
 }
 
+// processEvents обрабатывает события из канала в отдельной горутине.
+//
+// Записывает события в файл до получения сигнала завершения.
 func (f *FileObserver) processEvents() {
 	defer f.wg.Done()
 
@@ -60,6 +100,13 @@ func (f *FileObserver) processEvents() {
 	}
 }
 
+// writeToFile записывает событие в файл в формате JSON.
+//
+// Открывает файл в режиме добавления, сериализует событие и записывает его.
+// В случае ошибки молча завершается (в реальном приложении нужно логирование).
+//
+// Параметры:
+//   - event: событие аудита для записи
 func (f *FileObserver) writeToFile(event *models.AuditEvent) {
 	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -81,6 +128,10 @@ func (f *FileObserver) writeToFile(event *models.AuditEvent) {
 	}
 }
 
+// Close останавливает обработку событий и ожидает завершения горутины.
+//
+// Возвращает:
+//   - error: всегда nil
 func (f *FileObserver) Close() error {
 	close(f.done)
 	f.wg.Wait()

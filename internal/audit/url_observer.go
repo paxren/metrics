@@ -11,6 +11,10 @@ import (
 	"github.com/paxren/metrics/internal/models"
 )
 
+// URLObserver реализует наблюдателя, который отправляет события аудита на удалённый URL.
+//
+// Использует буферизированный канал для асинхронной отправки событий.
+// Каждое событие сериализуется в JSON и отправляется POST-запросом.
 type URLObserver struct {
 	url       string
 	client    *http.Client
@@ -19,10 +23,35 @@ type URLObserver struct {
 	wg        sync.WaitGroup
 }
 
+// NewURLObserver создаёт новый наблюдатель с буфером по умолчанию (100 событий).
+//
+// Параметры:
+//   - url: URL для отправки событий аудита
+//
+// Возвращает:
+//   - *URLObserver: указатель на созданного наблюдателя
+//
+// Пример использования:
+//
+//	observer := NewURLObserver("https://example.com/audit")
+//	defer observer.Close()
+//	event := NewAuditEvent([]string{"metric1"}, "192.168.1.1")
+//	observer.Notify(event)
 func NewURLObserver(url string) *URLObserver {
 	return NewURLObserverWithBufferSize(url, 100) // Буфер по умолчанию
 }
 
+// NewURLObserverWithBufferSize создаёт новый наблюдатель с указанным размером буфера.
+//
+// Запускает горутину для асинхронной обработки событий.
+// Создаёт HTTP-клиент с таймаутом 5 секунд.
+//
+// Параметры:
+//   - url: URL для отправки событий аудита
+//   - bufferSize: размер буфера для событий
+//
+// Возвращает:
+//   - *URLObserver: указатель на созданного наблюдателя
 func NewURLObserverWithBufferSize(url string, bufferSize int) *URLObserver {
 	u := &URLObserver{
 		url:       url,
@@ -39,6 +68,15 @@ func NewURLObserverWithBufferSize(url string, bufferSize int) *URLObserver {
 	return u
 }
 
+// Notify отправляет событие в канал для обработки.
+//
+// Если канал переполнен, возвращает ошибку.
+//
+// Параметры:
+//   - event: событие аудита для отправки
+//
+// Возвращает:
+//   - error: ошибка если канал переполнен
 func (u *URLObserver) Notify(event *models.AuditEvent) error {
 	select {
 	case u.eventChan <- event:
@@ -49,6 +87,9 @@ func (u *URLObserver) Notify(event *models.AuditEvent) error {
 	}
 }
 
+// processEvents обрабатывает события из канала в отдельной горутине.
+//
+// Отправляет события на URL до получения сигнала завершения.
 func (u *URLObserver) processEvents() {
 	defer u.wg.Done()
 
@@ -66,6 +107,13 @@ func (u *URLObserver) processEvents() {
 	}
 }
 
+// sendToURL отправляет событие на удалённый URL.
+//
+// Сериализует событие в JSON и отправляет POST-запросом.
+// В случае ошибки молча завершается (в реальном приложении нужно логирование).
+//
+// Параметры:
+//   - event: событие аудита для отправки
 func (u *URLObserver) sendToURL(event *models.AuditEvent) {
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -81,6 +129,10 @@ func (u *URLObserver) sendToURL(event *models.AuditEvent) {
 	defer resp.Body.Close()
 }
 
+// Close останавливает обработку событий и ожидает завершения горутины.
+//
+// Возвращает:
+//   - error: всегда nil
 func (u *URLObserver) Close() error {
 	close(u.done)
 	u.wg.Wait()

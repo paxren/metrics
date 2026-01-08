@@ -8,6 +8,9 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// AgentConfigEnv представляет конфигурацию агента из переменных окружения.
+//
+// Используется для парсинга переменных окружения с тегами env.
 type AgentConfigEnv struct {
 	Address        HostAddress `env:"ADDRESS,notEmpty"`
 	ReportInterval int64       `env:"REPORT_INTERVAL,notEmpty"`
@@ -16,6 +19,10 @@ type AgentConfigEnv struct {
 	Key            string      `env:"KEY,notEmpty"`
 }
 
+// AgentConfig представляет полную конфигурацию агента.
+//
+// Объединяет параметры из переменных окружения и флагов командной строки.
+// Приоритет отдается флагам командной строки.
 type AgentConfig struct {
 	envs           AgentConfigEnv
 	Address        HostAddress
@@ -31,12 +38,22 @@ type AgentConfig struct {
 	paramKey            string
 }
 
+// NewAgentConfig создаёт новую конфигурацию агента со значениями по умолчанию.
+//
+// Инициализирует параметры командной строки значениями по умолчанию.
+//
+// Возвращает:
+//   - *AgentConfig: указатель на созданную конфигурацию
 func NewAgentConfig() *AgentConfig {
 	return &AgentConfig{
 		paramAddress: *NewHostAddress(),
 	}
 }
 
+// Init инициализирует флаги командной строки для конфигурации агента.
+//
+// Устанавливает флаги с их значениями по умолчанию и описаниями.
+// Должен вызываться перед вызовом метода Parse().
 func (ac *AgentConfig) Init() {
 	flag.Var(&ac.paramAddress, "a", "Net address host:port")
 	flag.Int64Var(&ac.paramReportInterval, "r", 10, "reportInterval")
@@ -45,6 +62,11 @@ func (ac *AgentConfig) Init() {
 	flag.StringVar(&ac.paramKey, "k", "", "hashKey")
 }
 
+// Parse парсит переменные окружения и флаги командной строки.
+//
+// Заполняет конфигурацию значениями из переменных окружения и флагов.
+// Приоритет отдается флагам командной строки.
+// Должен вызываться после вызова метода Init().
 func (ac *AgentConfig) Parse() {
 	err := env.ParseWithOptions(&ac.envs, env.Options{
 		FuncMap: map[reflect.Type]env.ParserFunc{
