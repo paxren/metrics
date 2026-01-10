@@ -40,7 +40,10 @@ type EventHandler interface {
 	//
 	// Параметры:
 	//   - event: событие аудита для обработки
-	Handle(event *models.AuditEvent)
+	//
+	// Возвращает:
+	//   - error: ошибка при обработке события, если она произошла
+	Handle(event *models.AuditEvent) error
 }
 
 // BaseObserver содержит общую логику для всех наблюдателей.
@@ -80,6 +83,7 @@ func NewBaseObserver(bufferSize int, handler EventHandler) *BaseObserver {
 //
 // Делегирует обработку событий указанному обработчику.
 // Обрабатывает оставшиеся события перед выходом.
+// В случае ошибки обработки события логирует её (в реальном приложении).
 //
 // Параметры:
 //   - handler: обработчик событий
@@ -89,11 +93,15 @@ func (b *BaseObserver) processEvents(handler EventHandler) {
 	for {
 		select {
 		case event := <-b.eventChan:
-			handler.Handle(event)
+			if err := handler.Handle(event); err != nil {
+				// В реальном приложении здесь должно быть логирование ошибки
+			}
 		case <-b.done:
 			// Обрабатываем оставшиеся события перед выходом
 			for len(b.eventChan) > 0 {
-				handler.Handle(<-b.eventChan)
+				if err := handler.Handle(<-b.eventChan); err != nil {
+					// В реальном приложении здесь должно быть логирование ошибки
+				}
 			}
 			return
 		}

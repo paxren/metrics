@@ -3,6 +3,7 @@ package audit
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -71,21 +72,29 @@ type urlHandler struct {
 // Handle отправляет событие на удалённый URL.
 //
 // Сериализует событие в JSON и отправляет POST-запросом.
-// В случае ошибки молча завершается (в реальном приложении нужно логирование).
+// Возвращает ошибку при возникновении проблем с отправкой.
 //
 // Параметры:
 //   - event: событие аудита для отправки
-func (h *urlHandler) Handle(event *models.AuditEvent) {
+//
+// Возвращает:
+//   - error: ошибка при отправке события, если она произошла
+func (h *urlHandler) Handle(event *models.AuditEvent) error {
 	data, err := json.Marshal(event)
 	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
+		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
 	resp, err := h.client.Post(h.url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
+		return fmt.Errorf("failed to send event to URL %s: %w", h.url, err)
 	}
 	defer resp.Body.Close()
+
+	// Проверяем статус ответа
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("server returned status code %d for URL %s", resp.StatusCode, h.url)
+	}
+
+	return nil
 }

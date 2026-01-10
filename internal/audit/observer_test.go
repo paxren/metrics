@@ -14,10 +14,11 @@ type mockHandler struct {
 	mu     sync.Mutex
 }
 
-func (h *mockHandler) Handle(event *models.AuditEvent) {
+func (h *mockHandler) Handle(event *models.AuditEvent) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.events = append(h.events, event)
+	return nil
 }
 
 func (h *mockHandler) getEvents() []*models.AuditEvent {
