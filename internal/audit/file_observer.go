@@ -2,7 +2,7 @@ package audit
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"os"
 	"sync"
 
@@ -11,13 +11,11 @@ import (
 
 // FileObserver реализует наблюдателя, который записывает события аудита в файл.
 //
-// Использует буферизированный канал для асинхронной записи событий.
+// Использует BaseObserver для управления очередью событий и асинхронной обработки.
 // Каждое событие записывается в файл в формате JSON с новой строки.
 type FileObserver struct {
-	filePath  string
-	eventChan chan *models.AuditEvent
-	done      chan struct{}
-	wg        sync.WaitGroup
+	*BaseObserver
+	handler *fileHandler
 }
 
 // NewFileObserver создаёт новый наблюдатель с буфером по умолчанию (100 событий).
@@ -40,100 +38,127 @@ func NewFileObserver(filePath string) *FileObserver {
 
 // NewFileObserverWithBufferSize создаёт новый наблюдатель с указанным размером буфера.
 //
-// Запускает горутину для асинхронной обработки событий.
-//
 // Параметры:
 //   - filePath: путь к файлу для записи событий аудита
 //   - bufferSize: размер буфера для событий
 //
 // Возвращает:
 //   - *FileObserver: указатель на созданного наблюдателя
+//   - error: ошибка при создании обработчика файла
 func NewFileObserverWithBufferSize(filePath string, bufferSize int) *FileObserver {
-	f := &FileObserver{
-		filePath:  filePath,
-		eventChan: make(chan *models.AuditEvent, bufferSize),
-		done:      make(chan struct{}),
+	handler, err := newFileHandler(filePath)
+	if err != nil {
+		// В реальном приложении здесь должно быть логирование ошибки
+		return nil
 	}
 
-	f.wg.Add(1)
-	go f.processEvents()
-
-	return f
+	return &FileObserver{
+		BaseObserver: NewBaseObserver(bufferSize, handler),
+		handler:      handler,
+	}
 }
 
-// Notify отправляет событие в канал для обработки.
-//
-// Если канал переполнен, возвращает ошибку.
-//
-// Параметры:
-//   - event: событие аудита для записи
+// Close закрывает наблюдатель и освобождает ресурсы, включая файл.
 //
 // Возвращает:
-//   - error: ошибка если канал переполнен
-func (f *FileObserver) Notify(event *models.AuditEvent) error {
-	select {
-	case f.eventChan <- event:
-		return nil
-	default:
-		// Канал переполнен, логируем и возвращаем ошибку
-		return errors.New("file observer audit queue is full")
+//   - error: ошибка при закрытии, если она произошла
+func (fo *FileObserver) Close() error {
+	var err error
+
+	// Сначала закрываем базовый наблюдатель, который обработает оставшиеся события в очереди
+	if closeErr := fo.BaseObserver.Close(); closeErr != nil {
+		err = closeErr
 	}
-}
 
-// processEvents обрабатывает события из канала в отдельной горутине.
-//
-// Записывает события в файл до получения сигнала завершения.
-func (f *FileObserver) processEvents() {
-	defer f.wg.Done()
-
-	for {
-		select {
-		case event := <-f.eventChan:
-			f.writeToFile(event)
-		case <-f.done:
-			// Обрабатываем оставшиеся события перед выходом
-			for len(f.eventChan) > 0 {
-				f.writeToFile(<-f.eventChan)
-			}
-			return
+	// Затем закрываем файл, после того как все события обработаны
+	if fo.handler != nil {
+		if closeErr := fo.handler.close(); closeErr != nil && err == nil {
+			err = closeErr
 		}
 	}
+
+	return err
 }
 
-// writeToFile записывает событие в файл в формате JSON.
+// fileHandler реализует EventHandler для записи событий в файл
+type fileHandler struct {
+	filePath string
+	file     *os.File
+	mu       sync.Mutex
+	closed   bool
+}
+
+// newFileHandler создаёт новый обработчик файла и открывает его.
 //
-// Открывает файл в режиме добавления, сериализует событие и записывает его.
+// Параметры:
+//   - filePath: путь к файлу для записи событий аудита
+//
+// Возвращает:
+//   - *fileHandler: указатель на созданный обработчик
+//   - error: ошибка при открытии файла
+func newFileHandler(filePath string) (*fileHandler, error) {
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileHandler{
+		filePath: filePath,
+		file:     file,
+		closed:   false,
+	}, nil
+}
+
+// Handle записывает событие в файл в формате JSON.
+//
+// Использует предварительно открытый файл для повышения производительности.
 // В случае ошибки молча завершается (в реальном приложении нужно логирование).
 //
 // Параметры:
 //   - event: событие аудита для записи
-func (f *FileObserver) writeToFile(event *models.AuditEvent) {
-	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
+func (h *fileHandler) Handle(event *models.AuditEvent) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Если обработчик закрыт, возвращаем ошибку
+	if h.closed {
+		return fmt.Errorf("file handler is closed")
 	}
-	defer file.Close()
+
+	// Файл должен быть открыт (открыт в конструкторе)
+	if h.file == nil {
+		return fmt.Errorf("file is not open")
+	}
 
 	data, err := json.Marshal(event)
 	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
+		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	_, err = file.Write(append(data, '\n'))
+	_, err = h.file.Write(append(data, '\n'))
 	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
+		return fmt.Errorf("failed to write event to file: %w", err)
 	}
+
+	return nil
 }
 
-// Close останавливает обработку событий и ожидает завершения горутины.
+// close закрывает файл и освобождает ресурсы.
 //
 // Возвращает:
-//   - error: всегда nil
-func (f *FileObserver) Close() error {
-	close(f.done)
-	f.wg.Wait()
+//   - error: ошибка при закрытии, если она произошла
+func (h *fileHandler) close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Устанавливаем флаг закрытия перед закрытием файла
+	h.closed = true
+
+	if h.file != nil {
+		err := h.file.Close()
+		h.file = nil
+		return err
+	}
+
 	return nil
 }

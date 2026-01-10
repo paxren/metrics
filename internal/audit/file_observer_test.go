@@ -211,3 +211,43 @@ func TestFileObserver_Close(t *testing.T) {
 		t.Error("Expected data to be written after close")
 	}
 }
+
+func TestFileObserver_InvalidFilePath(t *testing.T) {
+	// Создаём наблюдатель с невалидным путём к файлу
+	observer := NewFileObserver("/invalid/path/that/does/not/exist/audit.log")
+
+	// Проверяем, что наблюдатель не создан из-за ошибки открытия файла
+	if observer == nil {
+		// Это ожидаемое поведение при ошибке создания файла
+		return
+	}
+
+	defer observer.Close()
+
+	// Создаём тестовое событие
+	event := &models.AuditEvent{
+		TS:        1234567890,
+		Metrics:   []string{"Alloc"},
+		IPAddress: "192.168.0.42",
+	}
+
+	// Уведомляем наблюдателя - не должно быть ошибки (асинхронная обработка)
+	err := observer.Notify(event)
+	if err != nil {
+		t.Errorf("Unexpected error for invalid file path (async processing): %v", err)
+	}
+
+	// Ждем некоторое время для асинхронной обработки
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestFileObserver_NewFileObserverWithBufferSize_Error(t *testing.T) {
+	// Создаём наблюдатель с невалидным путём к файлу
+	observer := NewFileObserverWithBufferSize("/invalid/path/that/does/not/exist/audit.log", 10)
+
+	// Проверяем, что наблюдатель не создан из-за ошибки открытия файла
+	if observer != nil {
+		defer observer.Close()
+		t.Error("Expected nil observer when file path is invalid")
+	}
+}

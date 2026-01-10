@@ -152,33 +152,22 @@ func (c *OptimizedCompressReader) Close() error {
 	return c.r.Close()
 }
 
-// Глобальный менеджер сжатия
-var globalCompressionManager *CompressionManager
-var compressionManagerOnce sync.Once
+// Compressor реализует middleware для сжатия с использованием dependency injection
+type Compressor struct {
+	manager *CompressionManager
+}
 
-// GetCompressionManager возвращает глобальный менеджер сжатия (singleton)
-func GetCompressionManager() *CompressionManager {
-	compressionManagerOnce.Do(func() {
-		config, err := ParseCompressionConfig()
-		if err != nil {
-			// Используем конфигурацию по умолчанию при ошибке
-			config = &CompressionConfig{
-				EnableCompression: true,
-				CompressionLevel:  6,
-				MinContentSize:    1024,
-			}
-		}
-		globalCompressionManager = NewCompressionManager(config)
-	})
-	return globalCompressionManager
+// NewCompressor создаёт новый экземпляр Compressor с переданным менеджером сжатия
+func NewCompressor(manager *CompressionManager) *Compressor {
+	return &Compressor{
+		manager: manager,
+	}
 }
 
 // OptimizedGzipMiddleware middleware с поддержкой пулов
-func OptimizedGzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
+func (c *Compressor) OptimizedGzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		manager := GetCompressionManager()
-
-		if !manager.IsCompressionEnabled() {
+		if !c.manager.IsCompressionEnabled() {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -190,7 +179,7 @@ func OptimizedGzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
 
 		if supportsGzip {
-			cw := NewOptimizedCompressWriter(w, manager)
+			cw := NewOptimizedCompressWriter(w, c.manager)
 			ow = cw
 			defer cw.Close()
 		}
@@ -200,7 +189,7 @@ func OptimizedGzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		sendsGzip := strings.Contains(contentEncoding, "gzip")
 
 		if sendsGzip {
-			cr, err := NewOptimizedCompressReader(r.Body, manager.GetReaderPool())
+			cr, err := NewOptimizedCompressReader(r.Body, c.manager.GetReaderPool())
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				return

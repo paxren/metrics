@@ -143,6 +143,19 @@ func main() {
 
 	hasher := handler.NewHasher(serverConfig.Key)
 
+	// Создаём менеджер сжатия
+	compressionConfig, err := handler.ParseCompressionConfig()
+	if err != nil {
+		// Используем конфигурацию по умолчанию при ошибке
+		compressionConfig = &handler.CompressionConfig{
+			EnableCompression: true,
+			CompressionLevel:  6,
+			MinContentSize:    1024,
+		}
+	}
+	compressionManager := handler.NewCompressionManager(compressionConfig)
+	compressor := handler.NewCompressor(compressionManager)
+
 	// Создаём наблюдателей для аудита
 	var auditObservers []audit.Observer
 
@@ -170,17 +183,17 @@ func main() {
 
 	// Применяем middleware ко всем эндпоинтам обновления метрик
 	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(handler.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
-	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(handler.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
 
-	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
+	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
+	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
-	r.Get(`/`, hlog.WithLogging(handler.OptimizedGzipMiddleware(handlerv.GetMain)))
+	r.Get(`/`, hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetMain)))
 
 	// Добавляем эндпоинты для pprof
 	//r.Handle("/debug/pprof/*", http.HandlerFunc(pprof.Index))

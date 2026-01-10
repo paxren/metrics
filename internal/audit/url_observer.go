@@ -3,9 +3,8 @@ package audit
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/paxren/metrics/internal/models"
@@ -13,14 +12,12 @@ import (
 
 // URLObserver реализует наблюдателя, который отправляет события аудита на удалённый URL.
 //
-// Использует буферизированный канал для асинхронной отправки событий.
+// Использует BaseObserver для управления очередью событий и асинхронной обработки.
 // Каждое событие сериализуется в JSON и отправляется POST-запросом.
 type URLObserver struct {
-	url       string
-	client    *http.Client
-	eventChan chan *models.AuditEvent
-	done      chan struct{}
-	wg        sync.WaitGroup
+	*BaseObserver
+	url    string
+	client *http.Client
 }
 
 // NewURLObserver создаёт новый наблюдатель с буфером по умолчанию (100 событий).
@@ -43,9 +40,6 @@ func NewURLObserver(url string) *URLObserver {
 
 // NewURLObserverWithBufferSize создаёт новый наблюдатель с указанным размером буфера.
 //
-// Запускает горутину для асинхронной обработки событий.
-// Создаёт HTTP-клиент с таймаутом 5 секунд.
-//
 // Параметры:
 //   - url: URL для отправки событий аудита
 //   - bufferSize: размер буфера для событий
@@ -53,88 +47,54 @@ func NewURLObserver(url string) *URLObserver {
 // Возвращает:
 //   - *URLObserver: указатель на созданного наблюдателя
 func NewURLObserverWithBufferSize(url string, bufferSize int) *URLObserver {
-	u := &URLObserver{
-		url:       url,
-		eventChan: make(chan *models.AuditEvent, bufferSize),
-		done:      make(chan struct{}),
-		client: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+	client := &http.Client{
+		Timeout: 5 * time.Second,
 	}
 
-	u.wg.Add(1)
-	go u.processEvents()
+	handler := &urlHandler{
+		url:    url,
+		client: client,
+	}
 
-	return u
-}
-
-// Notify отправляет событие в канал для обработки.
-//
-// Если канал переполнен, возвращает ошибку.
-//
-// Параметры:
-//   - event: событие аудита для отправки
-//
-// Возвращает:
-//   - error: ошибка если канал переполнен
-func (u *URLObserver) Notify(event *models.AuditEvent) error {
-	select {
-	case u.eventChan <- event:
-		return nil
-	default:
-		// Канал переполнен, логируем и возвращаем ошибку
-		return errors.New("url observer audit queue is full")
+	return &URLObserver{
+		BaseObserver: NewBaseObserver(bufferSize, handler),
+		url:          url,
+		client:       client,
 	}
 }
 
-// processEvents обрабатывает события из канала в отдельной горутине.
-//
-// Отправляет события на URL до получения сигнала завершения.
-func (u *URLObserver) processEvents() {
-	defer u.wg.Done()
-
-	for {
-		select {
-		case event := <-u.eventChan:
-			u.sendToURL(event)
-		case <-u.done:
-			// Обрабатываем оставшиеся события перед выходом
-			for len(u.eventChan) > 0 {
-				u.sendToURL(<-u.eventChan)
-			}
-			return
-		}
-	}
+// urlHandler реализует EventHandler для отправки событий на удалённый URL
+type urlHandler struct {
+	url    string
+	client *http.Client
 }
 
-// sendToURL отправляет событие на удалённый URL.
+// Handle отправляет событие на удалённый URL.
 //
 // Сериализует событие в JSON и отправляет POST-запросом.
-// В случае ошибки молча завершается (в реальном приложении нужно логирование).
+// Возвращает ошибку при возникновении проблем с отправкой.
 //
 // Параметры:
 //   - event: событие аудита для отправки
-func (u *URLObserver) sendToURL(event *models.AuditEvent) {
-	data, err := json.Marshal(event)
-	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
-	}
-
-	resp, err := u.client.Post(u.url, "application/json", bytes.NewBuffer(data))
-	if err != nil {
-		// В реальном приложении здесь должно быть логирование ошибки
-		return
-	}
-	defer resp.Body.Close()
-}
-
-// Close останавливает обработку событий и ожидает завершения горутины.
 //
 // Возвращает:
-//   - error: всегда nil
-func (u *URLObserver) Close() error {
-	close(u.done)
-	u.wg.Wait()
+//   - error: ошибка при отправке события, если она произошла
+func (h *urlHandler) Handle(event *models.AuditEvent) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	resp, err := h.client.Post(h.url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to send event to URL %s: %w", h.url, err)
+	}
+	defer resp.Body.Close()
+
+	// Проверяем статус ответа
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("server returned status code %d for URL %s", resp.StatusCode, h.url)
+	}
+
 	return nil
 }

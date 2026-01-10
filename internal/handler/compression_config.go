@@ -19,7 +19,7 @@ type CompressionConfig struct {
 	EnableCompression bool `env:"ENABLE_COMPRESSION" envDefault:"true"`
 
 	// MinContentSize минимальный размер контента для сжатия в байтах
-	MinContentSize int `env:"COMPRESSION_MIN_CONTENT_SIZE" envDefault:"1024"`
+	MinContentSize int `env:"COMPRESSION_MIN_CONTENT_SIZE" envDefault:"10"`
 }
 
 // ParseCompressionConfig парсит конфигурацию из переменных окружения
