@@ -280,24 +280,6 @@ func TestURLObserver_Close(t *testing.T) {
 }
 
 func TestURLObserver_HandlerError(t *testing.T) {
-	// Создаём обработчик напрямую для тестирования ошибок
-	handler := &urlHandler{
-		url: "https://example.com/audit",
-		client: &http.Client{
-			Timeout: 5 * time.Second,
-		},
-	}
-
-	// Создаём событие с невалидными данными, которые вызовут ошибку при JSON-сериализации
-	// Для этого нам нужно создать событие с полем, которое не может быть сериализовано
-	// Поскольку мы не можем изменить структуру AuditEvent, мы создадим специальный тест
-
-	// Создаём обычное событие, но затем заменим его на невалидное через unsafe
-	// Это сложный подход, поэтому вместо этого мы проверим обработку ошибки сети
-
-	// Тестируем обработку ошибки сети (уже есть в TestURLObserver_InvalidURL)
-	// Но для полноты покрытия добавим тест с другим типом ошибки
-
 	// Создаём тестовый сервер, который всегда возвращает ошибку
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Закрываем соединение без ответа, чтобы вызвать ошибку
@@ -316,7 +298,7 @@ func TestURLObserver_HandlerError(t *testing.T) {
 	defer server.Close()
 
 	// Создаём обработчик с URL тестового сервера
-	handler = &urlHandler{
+	handler := &urlHandler{
 		url: server.URL,
 		client: &http.Client{
 			Timeout: 100 * time.Millisecond,

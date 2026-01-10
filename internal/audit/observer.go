@@ -2,6 +2,7 @@ package audit
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/paxren/metrics/internal/models"
@@ -94,13 +95,13 @@ func (b *BaseObserver) processEvents(handler EventHandler) {
 		select {
 		case event := <-b.eventChan:
 			if err := handler.Handle(event); err != nil {
-				// В реальном приложении здесь должно быть логирование ошибки
+				fmt.Printf("Error handling audit event: %v\n", err)
 			}
 		case <-b.done:
 			// Обрабатываем оставшиеся события перед выходом
 			for len(b.eventChan) > 0 {
 				if err := handler.Handle(<-b.eventChan); err != nil {
-					// В реальном приложении здесь должно быть логирование ошибки
+					fmt.Printf("Error handling remaining audit event: %v\n", err)
 				}
 			}
 			return
