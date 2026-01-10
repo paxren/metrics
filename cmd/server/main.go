@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
@@ -16,6 +17,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"net/http/pprof"
+	//_ "net/http/pprof"
 )
 
 var (
@@ -139,19 +143,71 @@ func main() {
 
 	hasher := handler.NewHasher(serverConfig.Key)
 
+	// Создаём менеджер сжатия
+	compressionConfig, err := handler.ParseCompressionConfig()
+	if err != nil {
+		// Используем конфигурацию по умолчанию при ошибке
+		compressionConfig = &handler.CompressionConfig{
+			EnableCompression: true,
+			CompressionLevel:  6,
+			MinContentSize:    1024,
+		}
+	}
+	compressionManager := handler.NewCompressionManager(compressionConfig)
+	compressor := handler.NewCompressor(compressionManager)
+
+	// Создаём наблюдателей для аудита
+	var auditObservers []audit.Observer
+
+	// Создаём наблюдателя для файла, если указан путь
+	if serverConfig.AuditFile != "" {
+		fileObserver := audit.NewFileObserverWithBufferSize(serverConfig.AuditFile, 1000)
+		auditObservers = append(auditObservers, fileObserver)
+	}
+
+	// Создаём наблюдателя для URL, если указан URL
+	if serverConfig.AuditURL != "" {
+		urlObserver := audit.NewURLObserverWithBufferSize(serverConfig.AuditURL, 500)
+		auditObservers = append(auditObservers, urlObserver)
+	}
+
+	// Создаём аудитор
+	auditor := handler.NewAuditor(auditObservers)
+
+	// Добавляем функцию завершения работы аудита в массив finish
+	if auditor != nil {
+		finish = append(finish, auditor.Close)
+	}
+
 	r := chi.NewRouter()
 
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(handlerv.UpdateMetric))
-	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.GetValueJSON))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(handler.GzipMiddleware(handlerv.UpdateJSON))))
-	r.Post(`/updates`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON)))) //hasher.HashMiddleware(
-	r.Post(`/updates/`, hlog.WithLogging(hasher.HashMiddleware(handler.GzipMiddleware(handlerv.UpdatesJSON))))
+	// Применяем middleware ко всем эндпоинтам обновления метрик
+	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
+	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+
+	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
+	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
 	r.Get(`/value/{metric_type}/{metric_name}`, hlog.WithLogging(handlerv.GetMetric))
 	r.Get(`/ping`, hlog.WithLogging(handlerv.PingDB))
 	r.Get(`/ping/`, hlog.WithLogging(handlerv.PingDB))
-	r.Get(`/`, hlog.WithLogging(handler.GzipMiddleware(handlerv.GetMain)))
+	r.Get(`/`, hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetMain)))
+
+	// Добавляем эндпоинты для pprof
+	//r.Handle("/debug/pprof/*", http.HandlerFunc(pprof.Index))
+	// Замените строку 186 на эти:
+	r.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+	r.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	r.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	r.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	r.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	r.Handle("/debug/pprof/heap", http.HandlerFunc(pprof.Handler("heap").ServeHTTP))
+	r.Handle("/debug/pprof/goroutine", http.HandlerFunc(pprof.Handler("goroutine").ServeHTTP))
+	r.Handle("/debug/pprof/block", http.HandlerFunc(pprof.Handler("block").ServeHTTP))
+	r.Handle("/debug/pprof/mutex", http.HandlerFunc(pprof.Handler("mutex").ServeHTTP))
+	r.Handle("/debug/pprof/allocs", http.HandlerFunc(pprof.Handler("allocs").ServeHTTP))
 
 	server := &http.Server{
 		Addr:    serverConfig.Address.String(),
@@ -173,6 +229,7 @@ func main() {
 	//обработка сигтерм TODO добработать или переработать после понимания контекста и др
 	<-rootCtx.Done()
 	stop()
+
 	server.Shutdown(context.Background())
 	for _, f := range finish {
 		f()

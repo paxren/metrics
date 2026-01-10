@@ -400,7 +400,7 @@ func TestGzipMiddleware(t *testing.T) {
 			contentType:      "text/plain",
 			statusCode:       http.StatusOK,
 			responseBody:     "success",
-			expectCompressed: false,
+			expectCompressed: true, // text/plain поддерживается сжатием в CompressionManager
 		},
 		{
 			name:             "Client doesn't support gzip",
@@ -451,8 +451,17 @@ func TestGzipMiddleware(t *testing.T) {
 				w.Write([]byte(tt.responseBody))
 			})
 
+			// Создаем менеджер сжатия для тестов
+			config := &CompressionConfig{
+				EnableCompression: true,
+				CompressionLevel:  6,
+				MinContentSize:    0, // Устанавливаем 0 для тестов, чтобы сжимать даже маленькие данные
+			}
+			manager := NewCompressionManager(config)
+			compressor := NewCompressor(manager)
+
 			// Оборачиваем обработчик middleware
-			wrappedHandler := GzipMiddleware(testHandler)
+			wrappedHandler := compressor.OptimizedGzipMiddleware(testHandler)
 
 			// Создаем запрос
 			var reqBody io.Reader
@@ -507,23 +516,17 @@ func TestGzipMiddleware(t *testing.T) {
 					reader.Close()
 				}
 			} else {
-				// Проверяем, что ответ не сжат (в текущей реализации это означает,
-				// что Content-Encoding не установлен или needCompress=false)
-				//contentEncoding := rr.Header().Get("Content-Encoding")
-				bodyStr := rr.Body.String()
+				// Проверяем, что ответ не сжат
+				contentEncoding := rr.Header().Get("Content-Encoding")
+				if contentEncoding == "gzip" {
+					t.Errorf("Expected no Content-Encoding header, got %q", contentEncoding)
+				}
 
-				// В текущей реализации, даже когда needCompress=false, gzip writer закрывается
-				// и добавляет gzip-футер, поэтому мы проверяем, что тело ответа содержит
-				// оригинальные данные, даже если есть gzip-футер
+				// Проверяем, что тело ответа содержит оригинальные данные
+				bodyStr := rr.Body.String()
 				if !strings.Contains(bodyStr, tt.responseBody) {
 					t.Errorf("Expected response body to contain %q, got %q", tt.responseBody, bodyStr)
 				}
-
-				// Также проверяем, что Content-Encoding не установлен, когда сжатие не ожидается
-				//if contentEncoding == "gzip" {
-				// Это может произойти, если клиент поддерживает gzip, но контент не должен сжиматься
-				// В текущей реализации это ожидаемое поведение
-				//}
 			}
 
 			// Проверяем декомпрессию запроса
@@ -544,8 +547,17 @@ func TestGzipMiddlewareWithInvalidGzipData(t *testing.T) {
 		w.Write([]byte("success"))
 	})
 
+	// Создаем менеджер сжатия для тестов
+	config := &CompressionConfig{
+		EnableCompression: true,
+		CompressionLevel:  6,
+		MinContentSize:    0, // Устанавливаем 0 для тестов
+	}
+	manager := NewCompressionManager(config)
+	compressor := NewCompressor(manager)
+
 	// Оборачиваем обработчик middleware
-	wrappedHandler := GzipMiddleware(testHandler)
+	wrappedHandler := compressor.OptimizedGzipMiddleware(testHandler)
 
 	// Создаем запрос с невалидными gzip данными
 	req := httptest.NewRequest("POST", "/test", strings.NewReader("invalid gzip data"))
@@ -601,7 +613,16 @@ func BenchmarkGzipMiddleware(b *testing.B) {
 		w.Write([]byte(`{"message": "success"}`))
 	})
 
-	wrappedHandler := GzipMiddleware(testHandler)
+	// Создаем менеджер сжатия для тестов
+	config := &CompressionConfig{
+		EnableCompression: true,
+		CompressionLevel:  6,
+		MinContentSize:    0, // Устанавливаем 0 для тестов
+	}
+	manager := NewCompressionManager(config)
+	compressor := NewCompressor(manager)
+
+	wrappedHandler := compressor.OptimizedGzipMiddleware(testHandler)
 	req := httptest.NewRequest("POST", "/test", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 

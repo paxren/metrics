@@ -10,14 +10,14 @@ import (
 )
 
 type (
-	// берём структуру для хранения сведений об ответе
+	// responseHashData хранит данные для вычисления хеша ответа
 	responseHashData struct {
 		hashKeyBytes []byte
 		hash         string
 		err          bool
 	}
 
-	// добавляем реализацию http.ResponseWriter
+	// hashResponseWriter реализует http.ResponseWriter с поддержкой вычисления хеша
 	hashResponseWriter struct {
 		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
 		responseHD          *responseHashData
@@ -26,13 +26,21 @@ type (
 	}
 )
 
-// compressWriter реализует интерфейс http.ResponseWriter и позволяет прозрачно для сервера
-// сжимать передаваемые данные и выставлять правильные HTTP-заголовки
+// hasher реализует middleware для проверки и вычисления HMAC-хеша запросов и ответов.
+//
+// Использует алгоритм HMAC с хеш-функцией SHA-256 для проверки целостности данных.
 type hasher struct {
 	hashKey      string
 	hashKeyBytes []byte
 }
 
+// NewHasher создаёт новый экземпляр hasher с указанным ключом.
+//
+// Параметры:
+//   - key: ключ для вычисления HMAC-хеша
+//
+// Возвращает:
+//   - *hasher: указатель на созданный hasher
 func NewHasher(key string) *hasher {
 	var hashKeyBytes []byte = nil
 	if key != "" {
@@ -45,6 +53,15 @@ func NewHasher(key string) *hasher {
 	}
 }
 
+// HashMiddleware создаёт middleware для проверки хеша запроса и вычисления хеша ответа.
+//
+// Проверяет хеш в заголовке HashSHA256 запроса и вычисляет хеш для ответа.
+//
+// Параметры:
+//   - h: http.HandlerFunc для оборачивания
+//
+// Возвращает:
+//   - http.HandlerFunc: обёрнутый обработчик с поддержкой хеширования
 func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	logFn := func(res http.ResponseWriter, req *http.Request) {
 		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
@@ -73,17 +90,18 @@ func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 			src := buf.Bytes()
 			hash, _ := hash.MakeHash(&hs.hashKeyBytes, &src)
 
-			fmt.Printf("hash in header = %s, calculate hash body = %s \n", hashString, hash)
+			// Убираем вывод в консоль для корректной работы тестов
+			// fmt.Printf("hash in header = %s, calculate hash body = %s \n", hashString, hash)
 
 			if hashString != hash {
-				fmt.Println("will returning error")
+				// fmt.Println("will returning error")
 				errHash = true
 				http.Error(res, "не совпал хеш", http.StatusBadRequest)
 				return
 			}
 		}
 
-		fmt.Printf("errHash = %v \n", errHash)
+		// fmt.Printf("errHash = %v \n", errHash)
 		responseHD := &responseHashData{
 			hashKeyBytes: hs.hashKeyBytes,
 			hash:         "",
@@ -93,16 +111,19 @@ func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 			ResponseWriter: res, // встраиваем оригинальный http.ResponseWriter
 			responseHD:     responseHD,
 		}
-		fmt.Println("===hasher before serve hash ")
+		// fmt.Println("===hasher before serve hash ")
 		// передаём управление хендлеру
 		h.ServeHTTP(hashRes, req)
-		fmt.Println("===hasher after serve hash")
+		// fmt.Println("===hasher after serve hash")
 		hashRes.computeHash()
 	}
 
 	return http.HandlerFunc(logFn)
 }
 
+// Write записывает данные в ответ и сохраняет их для вычисления хеша.
+//
+// Реализует интерфейс http.ResponseWriter.
 func (hr *hashResponseWriter) Write(b []byte) (int, error) {
 	// записываем ответ, используя оригинальный http.ResponseWriter
 
@@ -111,6 +132,9 @@ func (hr *hashResponseWriter) Write(b []byte) (int, error) {
 	return hr.ResponseWriter.Write(b)
 }
 
+// WriteHeader устанавливает код статуса ответа.
+//
+// Реализует интерфейс http.ResponseWriter.
 func (hr *hashResponseWriter) WriteHeader(statusCode int) {
 	// записываем код статуса, используя оригинальный http.ResponseWriter
 	if hr.responseHD.err {
@@ -122,13 +146,16 @@ func (hr *hashResponseWriter) WriteHeader(statusCode int) {
 	//hr.responseData.status = statusCode // захватываем код статуса
 }
 
+// computeHash вычисляет HMAC-хеш для тела ответа и добавляет его в заголовки.
+//
+// Вычисляет хеш только один раз для каждого ответа.
 func (hr *hashResponseWriter) computeHash() {
 	if !hr.hashComputed && hr.responseHD.hashKeyBytes != nil && hr.responseBody.Len() > 0 {
 		rb := hr.responseBody.Bytes()
 		hash, err := hash.MakeHash(&hr.responseHD.hashKeyBytes, &rb)
 		if err == nil {
 			hr.Header().Set("HashSHA256", hash)
-			fmt.Printf("hash response = %s\n", hash)
+			// fmt.Printf("hash response = %s\n", hash)
 		}
 		hr.hashComputed = true
 	}
