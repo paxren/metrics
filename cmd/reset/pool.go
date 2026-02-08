@@ -7,7 +7,7 @@ type Resetter interface {
 	Reset()
 }
 
-// Pool представляет собой пул указателей на объекты с методом Reset()
+// Pool представляет собой пул объектов с методом Reset()
 // Generic-параметр T ограничен типами, реализующими интерфейс Resetter
 type Pool[T Resetter] struct {
 	pool sync.Pool
