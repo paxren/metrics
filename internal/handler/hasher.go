@@ -95,7 +95,6 @@ func (hs *hasher) HashMiddleware(h http.HandlerFunc) http.HandlerFunc {
 
 			if hashString != hash {
 				// fmt.Println("will returning error")
-				errHash = true
 				http.Error(res, "не совпал хеш", http.StatusBadRequest)
 				return
 			}

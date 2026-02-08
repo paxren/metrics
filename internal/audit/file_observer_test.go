@@ -92,7 +92,7 @@ func TestFileObserver_ConcurrentAccess(t *testing.T) {
 					IPAddress: "192.168.0.42",
 				}
 
-				err := observer.Notify(event)
+				err = observer.Notify(event)
 				if err != nil {
 					t.Errorf("Failed to notify observer: %v", err)
 				}

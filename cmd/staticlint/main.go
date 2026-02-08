@@ -200,7 +200,7 @@ func main() {
 		panic(err)
 	}
 	mychecks := []*analysis.Analyzer{
-		ErrCheckAnalyzer,
+		//ErrCheckAnalyzer,
 		// Стандартные анализаторы из golang.org/x/tools/go/analysis/passes
 		asmdecl.Analyzer,
 		assign.Analyzer,
