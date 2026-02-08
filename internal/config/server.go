@@ -8,6 +8,9 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// ServerConfigEnv представляет конфигурацию сервера из переменных окружения.
+//
+// Используется для парсинга переменных окружения с тегами env.
 type ServerConfigEnv struct {
 	StoreInterval   uint64      `env:"STORE_INTERVAL,notEmpty"`
 	FileStoragePath string      `env:"FILE_STORAGE_PATH,notEmpty"`
@@ -15,8 +18,14 @@ type ServerConfigEnv struct {
 	Restore         bool        `env:"RESTORE,notEmpty"`
 	Address         HostAddress `env:"ADDRESS,notEmpty"`
 	Key             string      `env:"KEY,notEmpty"`
+	AuditFile       string      `env:"AUDIT_FILE,notEmpty"`
+	AuditURL        string      `env:"AUDIT_URL,notEmpty"`
 }
 
+// ServerConfig представляет полную конфигурацию сервера.
+//
+// Объединяет параметры из переменных окружения и флагов командной строки.
+// Приоритет отдается флагам командной строки.
 type ServerConfig struct {
 	envs            ServerConfigEnv
 	Address         HostAddress
@@ -25,6 +34,8 @@ type ServerConfig struct {
 	DatabaseDSN     string
 	Key             string
 	Restore         bool
+	AuditFile       string
+	AuditURL        string
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
@@ -32,8 +43,16 @@ type ServerConfig struct {
 	paramDatabaseDSN     string
 	paramKey             string
 	paramRestore         bool
+	paramAuditFile       string
+	paramAuditURL        string
 }
 
+// NewServerConfig создаёт новую конфигурацию сервера со значениями по умолчанию.
+//
+// Инициализирует параметры командной строки значениями по умолчанию.
+//
+// Возвращает:
+//   - *ServerConfig: указатель на созданную конфигурацию
 func NewServerConfig() *ServerConfig {
 
 	return &ServerConfig{
@@ -42,46 +61,27 @@ func NewServerConfig() *ServerConfig {
 
 }
 
+// Init инициализирует флаги командной строки для конфигурации сервера.
+//
+// Устанавливает флаги с их значениями по умолчанию и описаниями.
+// Должен вызываться перед вызовом метода Parse().
 func (se *ServerConfig) Init() {
-	// fmt.Printf("start init:\n\n")
-	// fmt.Println("======BEFORE PARAMS PARSE-----")
-	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
-	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
-	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
-	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
-	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
-	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
-	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("Adress = %v\n", se.Address)
 	flag.Var(&se.paramAddress, "a", "Net address host:port")
 	flag.Uint64Var(&se.paramStoreInterval, "i", 300, "storeInterval")
 	flag.StringVar(&se.paramFileStoragePath, "f", "save_file", "fileStoragePath")
 	flag.StringVar(&se.paramDatabaseDSN, "d", "", "fileStoragePath")
 	flag.StringVar(&se.paramKey, "k", "", "key for hash")
 	flag.BoolVar(&se.paramRestore, "r", false, "paramRestore")
-
-	// fmt.Println("======AFTER PARAMS PARSE-----")
-	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
-	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
-	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
-	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
-	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
-	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
-	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("Adress = %v\n", se.Address)
+	flag.StringVar(&se.paramAuditFile, "audit-file", "", "path to audit file")
+	flag.StringVar(&se.paramAuditURL, "audit-url", "", "URL for audit logs")
 }
 
+// Parse парсит переменные окружения и флаги командной строки.
+//
+// Заполняет конфигурацию значениями из переменных окружения и флагов.
+// Приоритет отдается флагам командной строки.
+// Должен вызываться после вызова метода Init().
 func (se *ServerConfig) Parse() {
-
-	// fmt.Println("======BEFORE ENV PARSE-----")
-	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
-	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
-	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
-	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
-	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
-	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
-	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("Adress = %v\n", se.Address)
 
 	err := env.ParseWithOptions(&se.envs, env.Options{
 		FuncMap: map[reflect.Type]env.ParserFunc{
@@ -98,53 +98,29 @@ func (se *ServerConfig) Parse() {
 	problemVars := make(map[string]bool)
 
 	if err != nil {
-		// fmt.Printf("err type %T:\n\n", err)
 		if err, ok := err.(env.AggregateError); ok {
-			// fmt.Printf("err.Errors: %v\n\n", err.Errors)
 
 			for _, v := range err.Errors {
 				fmt.Printf("err.Error: %T\n", v)
 				fmt.Printf("err.Error: %v\n", v)
 
 				if err1, ok := v.(env.EmptyVarError); ok {
-					// fmt.Printf("err.EmptyVarError: %v\n", err1)
-					// fmt.Printf("err.EmptyVarError.Key: %v\n", err1.Key)
-
 					problemVars[err1.Key] = true
 				}
 
 				if err2, ok := v.(env.ParseError); ok {
-					// fmt.Printf("err.ParseError: %v\n", err2)
-					// fmt.Printf("err.ParseError.Name: %v\n", err2.Name)
-					// fmt.Printf("err.ParseError.Type: %v\n", err2.Type)
-					// fmt.Printf("err.ParseError.Err: %v\n", err2.Err)
-
 					problemVars[err2.Name] = true
 				}
 
 				if _, ok := v.(HostAddressParseError); ok {
-
 					problemVars["ADDRESS"] = true
 				}
-
-				//fmt.Println("----------------------")
 			}
-
 		}
 	}
 
 	fmt.Printf("problemVars = %v", problemVars)
 	flag.Parse()
-
-	// fmt.Println("======FLAG PARSED-----")
-	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
-	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
-	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
-	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
-	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
-	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
-	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("Adress = %v\n", se.Address)
 
 	_, ok1 := problemVars["STORE_INTERVAL"]
 	_, ok2 := problemVars["StoreInterval"]
@@ -193,13 +169,20 @@ func (se *ServerConfig) Parse() {
 	} else {
 		se.Key = se.paramKey
 	}
-	// fmt.Println("======RESULT-----")
-	// fmt.Printf("paramStoreInterval = %v\n", se.paramStoreInterval)
-	// fmt.Printf("paramFileStoragePath = %v\n", se.paramFileStoragePath)
-	// fmt.Printf("paramRestore = %v\n", se.paramRestore)
-	// fmt.Printf("paramAdress = %v\n", se.paramAddress)
-	// fmt.Printf("StoreInterval = %v\n", se.StoreInterval)
-	// fmt.Printf("FileStoragePath = %v\n", se.FileStoragePath)
-	// fmt.Printf("Restore = %v\n", se.Restore)
-	// fmt.Printf("Adress = %v\n", se.Address)
+
+	_, ok1 = problemVars["AUDIT_FILE"]
+	_, ok2 = problemVars["AuditFile"]
+	if !ok1 && !ok2 {
+		se.AuditFile = se.envs.AuditFile
+	} else {
+		se.AuditFile = se.paramAuditFile
+	}
+
+	_, ok1 = problemVars["AUDIT_URL"]
+	_, ok2 = problemVars["AuditURL"]
+	if !ok1 && !ok2 {
+		se.AuditURL = se.envs.AuditURL
+	} else {
+		se.AuditURL = se.paramAuditURL
+	}
 }

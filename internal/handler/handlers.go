@@ -17,6 +17,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// Handler представляет обработчик HTTP-запросов для работы с метриками.
+//
+// Предоставляет методы для обновления, получения и отображения метрик
+// различных типов (gauge и counter) через HTTP-интерфейс.
 type Handler struct {
 	repo repository.Repository
 
@@ -24,6 +28,13 @@ type Handler struct {
 	dbConnectionString string
 }
 
+// NewHandler создаёт новый экземпляр обработчика метрик.
+//
+// Параметры:
+//   - r: реализация интерфейса Repository для хранения метрик
+//
+// Возвращает:
+//   - *Handler: указатель на созданный обработчик
 func NewHandler(r repository.Repository) *Handler {
 	return &Handler{
 		repo: r,
@@ -37,6 +48,12 @@ func NewHandler(r repository.Repository) *Handler {
 // 	// fmt.Printf("после присваивания h.dbConnectionString %s \n", h.dbConnectionString)
 // }
 
+// UpdateMetric обрабатывает запрос на обновление метрики через URL.
+//
+// Поддерживает формат URL: /update/{metric_type}/{metric_name}/{metric_value}
+// где metric_type - "gauge" или "counter", metric_value - числовое значение.
+//
+// Принимает только POST-запросы.
 func (h Handler) UpdateMetric(res http.ResponseWriter, req *http.Request) {
 	//res.Write([]byte("Привет!"))
 	//fmt.Println("run update")
@@ -90,9 +107,16 @@ func (h Handler) UpdateMetric(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte(fmt.Sprintf("elems: %v repo: %v \r\n", elems, h.repo)))
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
-	fmt.Println(req.URL)
+	// Убираем вывод в консоль для корректной работы тестов
+	// fmt.Println(req.URL)
 }
 
+// GetMetric обрабатывает запрос на получение значения метрики через URL.
+//
+// Поддерживает формат URL: /value/{metric_type}/{metric_name}
+// где metric_type - "gauge" или "counter".
+//
+// Возвращает значение метрики в виде текста.
 func (h Handler) GetMetric(res http.ResponseWriter, req *http.Request) {
 	//res.Write([]byte("Привет!"))
 	//fmt.Println("run get")
@@ -148,9 +172,13 @@ func (h Handler) GetMetric(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte(stringValue))
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
-	fmt.Println(req.URL, stringValue)
+	// Убираем вывод в консоль для корректной работы тестов
+	// fmt.Println(req.URL, stringValue)
 }
 
+// GetMain обрабатывает запрос на получение главной страницы со всеми метриками.
+//
+// Возвращает HTML-страницу с таблицей всех сохранённых метрик.
 func (h Handler) GetMain(res http.ResponseWriter, req *http.Request) {
 	const formStart = `<html>
 <head>
@@ -200,9 +228,14 @@ func (h Handler) GetMain(res http.ResponseWriter, req *http.Request) {
 
 	//res.Write([]byte(fmt.Sprintf("len %v \r\n", len(elems))))
 
-	fmt.Println(req.URL)
+	// Убираем вывод в консоль для корректной работы тестов
+	// fmt.Println(req.URL)
 }
 
+// UpdateJSON обрабатывает запрос на обновление одной метрики через JSON.
+//
+// Принимает JSON-объект метрики в теле POST-запроса с Content-Type: application/json.
+// Поддерживает метрики типов "gauge" и "counter".
 func (h Handler) UpdateJSON(res http.ResponseWriter, req *http.Request) {
 
 	if req.Method != http.MethodPost {
@@ -262,20 +295,25 @@ func (h Handler) UpdateJSON(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(http.StatusOK)
 }
 
+// UpdatesJSON обрабатывает запрос на пакетное обновление метрик через JSON.
+//
+// Принимает массив JSON-объектов метрик в теле POST-запроса с Content-Type: application/json.
+// Поддерживает метрики типов "gauge" и "counter".
 func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 
-	fmt.Println("===handlers start updates")
-	defer fmt.Println("===handlers finish updates")
+	// Убираем вывод в консоль для корректной работы тестов
+	// fmt.Println("===handlers start updates")
+	// defer fmt.Println("===handlers finish updates")
 
 	if req.Method != http.MethodPost {
 		res.WriteHeader(http.StatusMethodNotAllowed)
-		fmt.Println("-=UpdatesJSON:   err http.MethodPost")
+		// fmt.Println("-=UpdatesJSON:   err http.MethodPost")
 		return
 	}
 
 	if req.Header.Get("Content-Type") != "application/json" {
 		res.WriteHeader(http.StatusResetContent)
-		fmt.Println("-=UpdatesJSON:   err req.Header.Get Content-Type...")
+		// fmt.Println("-=UpdatesJSON:   err req.Header.Get Content-Type...")
 		return
 	}
 
@@ -288,13 +326,13 @@ func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 	_, err := buf.ReadFrom(req.Body)
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
-		fmt.Println("-=UpdatesJSON:   err ReadFrom(req.Body)")
+		// fmt.Println("-=UpdatesJSON:   err ReadFrom(req.Body)")
 		return
 	}
 	// десериализуем JSON в Metric
 	if err = json.Unmarshal(buf.Bytes(), &metrics); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
-		fmt.Println("-=UpdatesJSON:   err json.Unmarshal")
+		// fmt.Println("-=UpdatesJSON:   err json.Unmarshal")
 		return
 	}
 
@@ -337,11 +375,15 @@ func (h Handler) UpdatesJSON(res http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	fmt.Println("   before status ok")
+	// fmt.Println("   before status ok")
 	res.WriteHeader(http.StatusOK)
-	fmt.Println("   after status ok")
+	// fmt.Println("   after status ok")
 }
 
+// GetValueJSON обрабатывает запрос на получение значения метрики через JSON.
+//
+// Принимает JSON-объект с полями ID и MType в теле POST-запроса с Content-Type: application/json.
+// Возвращает JSON-объект метрики с заполненным полем Value или Delta.
 func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 	//Content-Type application/json
 	if req.Method != http.MethodPost {
@@ -405,6 +447,10 @@ func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 	res.Write(resp)
 }
 
+// PingDB обрабатывает запрос на проверку соединения с базой данных.
+//
+// Возвращает статус 200, если соединение с базой данных установлено,
+// или статус 500 в случае ошибки.
 func (h Handler) PingDB(res http.ResponseWriter, req *http.Request) {
 
 	if pinger, ok := h.repo.(repository.Pinger); ok {
