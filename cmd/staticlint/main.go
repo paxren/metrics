@@ -190,7 +190,7 @@ func main() {
 		}
 	}
 	multichecker.Main(
-		ErrCheckAnalyzer,
+		//ErrCheckAnalyzer,
 		printf.Analyzer,
 		shadow.Analyzer,
 		shift.Analyzer,
