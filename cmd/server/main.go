@@ -70,8 +70,8 @@ func main() {
 
 	var handlerv *handler.Handler
 	if serverConfig.DatabaseDSN != "" {
-
-		pstorage, err := repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
+		var pstorage *repository.PostgresStorageWithRetry
+		pstorage, err = repository.MakePostgresStorageWithRetry(serverConfig.DatabaseDSN)
 
 		if err != nil {
 			// вызываем панику, если ошибка
@@ -82,7 +82,8 @@ func main() {
 			)
 			//panic("cannot initialize postgress")
 		}
-		mutexed, err := repository.MakeMutexedRegistry(pstorage)
+		var mutexed repository.Repository
+		mutexed, err = repository.MakeMutexedRegistry(pstorage)
 		if err != nil {
 			// вызываем панику, если ошибка
 			sugar.Fatal(
