@@ -1,3 +1,9 @@
+// Package osexit реализует анализатор для проверки прямых вызовов os.Exit
+// в функции main пакета main.
+//
+// Анализатор находит прямые вызовы os.Exit в функции main, что считается
+// плохой практикой, так как это препятствует корректной очистке ресурсов
+// и обработке ошибок в библиотечном коде.
 package osexit
 
 import (
@@ -6,12 +12,27 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+// Analyzer проверяет наличие прямых вызовов os.Exit в функции main пакета main.
+// Анализатор находит следующие ситуации:
+//  1. Прямые вызовы os.Exit в функции main
+//  2. Вызовы os.Exit в любом месте пакета main (только в функции main)
+//
+// Пример обнаруживаемой проблемы:
+//
+//	func main() {
+//	    os.Exit(1)  // прямой вызов os.Exit
+//	}
+//
+// Рекомендуется использовать return вместо os.Exit в функции main.
 var Analyzer = &analysis.Analyzer{
 	Name: "osexit",
-	Doc:  "check for direct os.Exit calls in main function of main package",
+	Doc:  "проверка прямых вызовов os.Exit в функции main пакета main",
 	Run:  run,
 }
 
+// run выполняет анализ пакета на наличие прямых вызовов os.Exit в функции main.
+// Функция проверяет, что текущий пакет является пакетом main, затем ищет
+// функцию main и проверяет наличие вызовов os.Exit в ее теле.
 func run(pass *analysis.Pass) (interface{}, error) {
 	// Проверяем, что мы находимся в пакете main
 	if pass.Pkg.Name() != "main" {
@@ -54,7 +75,9 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-// isOsExitCall проверяет, является ли вызов вызовом os.Exit
+// isOsExitCall проверяет, является ли вызов вызовом os.Exit.
+// Функция анализирует селекторное выражение и проверяет, что
+// вызывается метод Exit из пакета os.
 func isOsExitCall(pass *analysis.Pass, call *ast.CallExpr) bool {
 	// Проверяем для селекторных выражений (os.Exit)
 	if selExpr, ok := call.Fun.(*ast.SelectorExpr); ok {
