@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -23,6 +24,9 @@ import (
 )
 
 var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 	serverConfig = config.NewServerConfig()
 )
 
@@ -31,6 +35,20 @@ func init() {
 }
 
 func main() {
+	// Выводим информацию о сборке
+	if buildVersion == "" {
+		buildVersion = "N/A"
+	}
+	if buildDate == "" {
+		buildDate = "N/A"
+	}
+	if buildCommit == "" {
+		buildCommit = "N/A"
+	}
+
+	fmt.Printf("Build version: %s\n", buildVersion)
+	fmt.Printf("Build date: %s\n", buildDate)
+	fmt.Printf("Build commit: %s\n", buildCommit)
 
 	//обработка сигтерм, по статье https://habr.com/ru/articles/908344/
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
