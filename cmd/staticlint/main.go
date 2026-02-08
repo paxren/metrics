@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/paxren/metrics/cmd/staticlint/osexit"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
 	"golang.org/x/tools/go/analysis/passes/printf"
@@ -178,6 +179,7 @@ func main() {
 		printf.Analyzer,
 		shadow.Analyzer,
 		structtag.Analyzer,
+		osexit.Analyzer,
 	}
 	checks := make(map[string]bool)
 	for _, v := range cfg.Staticcheck {
@@ -195,5 +197,6 @@ func main() {
 		shadow.Analyzer,
 		shift.Analyzer,
 		structtag.Analyzer,
+		osexit.Analyzer,
 	)
 }
