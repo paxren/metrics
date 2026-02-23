@@ -413,7 +413,8 @@ func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 
 	switch metric.MType {
 	case "counter":
-		v, err := h.repo.GetCounter(metric.ID)
+		var v int64
+		v, err = h.repo.GetCounter(metric.ID)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("Неизвестное имя метрики: %v \r\n", metric.ID), http.StatusNotFound)
 			return
@@ -421,7 +422,8 @@ func (h Handler) GetValueJSON(res http.ResponseWriter, req *http.Request) {
 
 		metricOut.Delta = &v
 	case "gauge":
-		v, err := h.repo.GetGauge(metric.ID)
+		var v float64
+		v, err = h.repo.GetGauge(metric.ID)
 		if err != nil {
 			http.Error(res, fmt.Sprintf("Неизвестное имя метрики: %v \r\n", metric.ID), http.StatusNotFound)
 			return

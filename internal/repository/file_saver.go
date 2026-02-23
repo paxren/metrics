@@ -125,8 +125,8 @@ func (fs *FileSaver) Save() error {
 	metrics := make([]models.Metrics, 0)
 
 	for _, key := range fs.Repository.GetGaugesKeys() {
-
-		value, err := fs.Repository.GetGauge(key)
+		var value float64
+		value, err = fs.Repository.GetGauge(key)
 		if err != nil {
 			return err
 		}
@@ -141,8 +141,8 @@ func (fs *FileSaver) Save() error {
 	}
 
 	for _, key := range fs.Repository.GetCountersKeys() {
-
-		value, err := fs.Repository.GetCounter(key)
+		var value int64
+		value, err = fs.Repository.GetCounter(key)
 		if err != nil {
 			return err
 		}
