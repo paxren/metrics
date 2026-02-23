@@ -17,6 +17,7 @@ type AgentConfigEnv struct {
 	PollInterval   int64       `env:"POLL_INTERVAL,notEmpty"`
 	RateLimit      int64       `env:"RATE_LIMIT,notEmpty"`
 	Key            string      `env:"KEY,notEmpty"`
+	CryptoKey      string      `env:"CRYPTO_KEY,notEmpty"`
 }
 
 // AgentConfig представляет полную конфигурацию агента.
@@ -30,12 +31,14 @@ type AgentConfig struct {
 	PollInterval   int64
 	RateLimit      int64
 	Key            string
+	CryptoKey      string
 
 	paramAddress        HostAddress
 	paramReportInterval int64
 	paramPollInterval   int64
 	paramRateLimit      int64
 	paramKey            string
+	paramCryptoKey      string
 }
 
 // NewAgentConfig создаёт новую конфигурацию агента со значениями по умолчанию.
@@ -60,6 +63,7 @@ func (ac *AgentConfig) Init() {
 	flag.Int64Var(&ac.paramPollInterval, "p", 2, "pollInterval")
 	flag.Int64Var(&ac.paramRateLimit, "l", 1, "rateLimit")
 	flag.StringVar(&ac.paramKey, "k", "", "hashKey")
+	flag.StringVar(&ac.paramCryptoKey, "crypto-key", "", "path to public key file")
 }
 
 // Parse парсит переменные окружения и флаги командной строки.
@@ -147,5 +151,14 @@ func (ac *AgentConfig) Parse() {
 		ac.Key = ac.envs.Key
 	} else {
 		ac.Key = ac.paramKey
+	}
+
+	// CryptoKey
+	_, ok1 = problemVars["CRYPTO_KEY"]
+	_, ok2 = problemVars["CryptoKey"]
+	if !ok1 && !ok2 {
+		ac.CryptoKey = ac.envs.CryptoKey
+	} else {
+		ac.CryptoKey = ac.paramCryptoKey
 	}
 }

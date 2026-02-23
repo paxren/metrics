@@ -20,6 +20,7 @@ type ServerConfigEnv struct {
 	Key             string      `env:"KEY,notEmpty"`
 	AuditFile       string      `env:"AUDIT_FILE,notEmpty"`
 	AuditURL        string      `env:"AUDIT_URL,notEmpty"`
+	CryptoKey       string      `env:"CRYPTO_KEY,notEmpty"`
 }
 
 // ServerConfig представляет полную конфигурацию сервера.
@@ -36,6 +37,7 @@ type ServerConfig struct {
 	Restore         bool
 	AuditFile       string
 	AuditURL        string
+	CryptoKey       string
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
@@ -45,6 +47,7 @@ type ServerConfig struct {
 	paramRestore         bool
 	paramAuditFile       string
 	paramAuditURL        string
+	paramCryptoKey       string
 }
 
 // NewServerConfig создаёт новую конфигурацию сервера со значениями по умолчанию.
@@ -74,6 +77,7 @@ func (se *ServerConfig) Init() {
 	flag.BoolVar(&se.paramRestore, "r", false, "paramRestore")
 	flag.StringVar(&se.paramAuditFile, "audit-file", "", "path to audit file")
 	flag.StringVar(&se.paramAuditURL, "audit-url", "", "URL for audit logs")
+	flag.StringVar(&se.paramCryptoKey, "crypto-key", "", "path to private key file")
 }
 
 // Parse парсит переменные окружения и флаги командной строки.
@@ -184,5 +188,13 @@ func (se *ServerConfig) Parse() {
 		se.AuditURL = se.envs.AuditURL
 	} else {
 		se.AuditURL = se.paramAuditURL
+	}
+
+	_, ok1 = problemVars["CRYPTO_KEY"]
+	_, ok2 = problemVars["CryptoKey"]
+	if !ok1 && !ok2 {
+		se.CryptoKey = se.envs.CryptoKey
+	} else {
+		se.CryptoKey = se.paramCryptoKey
 	}
 }
