@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/crypto"
 	"github.com/paxren/metrics/internal/hash"
 	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
@@ -29,23 +30,25 @@ import (
 const numJobs = 100
 
 type Agent struct {
-	Repo           repository.Repository
-	RepoExt        repository.Repository
-	host           config.HostAddress
-	hashKey        string
-	hashKeyBytes   []byte
-	numWorkers     int64
-	jobs           chan []models.Metrics
-	numJobs        int64
-	once           sync.Once
-	pollTicker     *time.Ticker
-	reportTicker   *time.Ticker
-	pollInterval   int64
-	reportInterval int64
-	memStats       runtime.MemStats
-	PollCount      int64
-	randFloat      float64
-	done           chan struct{}
+	Repo            repository.Repository
+	RepoExt         repository.Repository
+	host            config.HostAddress
+	hashKey         string
+	hashKeyBytes    []byte
+	numWorkers      int64
+	jobs            chan []models.Metrics
+	numJobs         int64
+	once            sync.Once
+	pollTicker      *time.Ticker
+	reportTicker    *time.Ticker
+	pollInterval    int64
+	reportInterval  int64
+	memStats        runtime.MemStats
+	PollCount       int64
+	randFloat       float64
+	done            chan struct{}
+	cryptoEncryptor *crypto.Encryptor
+	hybridEncryptor *crypto.HybridEncryptor
 }
 
 // оставлено для совместимости с тестами
@@ -70,7 +73,7 @@ func NewAgent(host config.HostAddress) *Agent {
 	return agent
 }
 
-func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64) *Agent {
+func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64, cryptoKeyPath string) *Agent {
 
 	//fmt.Println("======dfsdfs==========")
 	agent := NewAgent(host)
@@ -93,6 +96,16 @@ func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterv
 
 	if reportInterval >= 1 {
 		agent.reportInterval = reportInterval
+	}
+
+	// Инициализируем шифратор, если указан путь к ключу
+	if cryptoKeyPath != "" {
+		hybridEncryptor, err := crypto.NewHybridEncryptor(cryptoKeyPath)
+		if err != nil {
+			fmt.Printf("Failed to create hybrid encryptor: %v\n", err)
+		} else {
+			agent.hybridEncryptor = hybridEncryptor
+		}
 	}
 
 	//fmt.Printf("agent %v\n", agent)
@@ -157,7 +170,7 @@ func (a *Agent) pollStdMetrics(repo repository.Repository) {
 
 func (a *Agent) pollExtMetrics(repo repository.Repository) {
 
-	fmt.Println("собираю расширенные данные")
+	//fmt.Println("собираю расширенные данные")
 
 	memory, _ := mem.VirtualMemory()
 	cpu, _ := cpu.Percent(10*time.Millisecond, true)
@@ -242,12 +255,23 @@ func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 		return nil, errors
 	}
 
+	// Шифруем данные, если есть шифратор
+	var dataToCompress []byte = metricJSON
+	if a.hybridEncryptor != nil {
+		encryptedData, err := a.hybridEncryptor.Encrypt(metricJSON)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to encrypt data: %w", err))
+			return nil, errors
+		}
+		dataToCompress = encryptedData
+	}
+
 	var gzipped bytes.Buffer
 	// создаём переменную w — в неё будут записываться входящие данные,
 	// которые будут сжиматься и сохраняться в bytes.Buffer
 	w := gzip.NewWriter(&gzipped)
 
-	_, err = w.Write(metricJSON)
+	_, err = w.Write(dataToCompress)
 	if err != nil {
 		errors = append(errors, err)
 		return nil, errors
@@ -261,6 +285,7 @@ func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/updates", &gzipped)
 	if err != nil {
 		errors = append(errors, err)
+		return nil, errors
 	}
 	request.Header.Set(`Content-Type`, `application/json`)
 	request.Header.Set(`Accept-Encoding`, `gzip`)
@@ -294,6 +319,11 @@ func (a *Agent) SendAll(metrics []models.Metrics) []error {
 
 	request, errors2 := a.makeRequest(metrics)
 	errors = append(errors, errors2...)
+
+	// Если запрос не создан, возвращаем ошибки
+	if request == nil {
+		return errors
+	}
 
 	const maxRetries = 3
 
@@ -394,12 +424,23 @@ func (a *Agent) work1(metricOut *models.Metrics, client *http.Client, errors []e
 		return errors
 	}
 
+	// Шифруем данные, если есть шифратор
+	var dataToCompress []byte = metricJSON
+	if a.hybridEncryptor != nil {
+		encryptedData, err := a.hybridEncryptor.Encrypt(metricJSON)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to encrypt data: %w", err))
+			return errors
+		}
+		dataToCompress = encryptedData
+	}
+
 	var gzipped bytes.Buffer
 	// создаём переменную w — в неё будут записываться входящие данные,
 	// которые будут сжиматься и сохраняться в bytes.Buffer
 	w := gzip.NewWriter(&gzipped)
 
-	_, err = w.Write(metricJSON)
+	_, err = w.Write(dataToCompress)
 	if err != nil {
 		errors = append(errors, err)
 		return errors
@@ -413,6 +454,7 @@ func (a *Agent) work1(metricOut *models.Metrics, client *http.Client, errors []e
 	request, err := http.NewRequest(http.MethodPost, "http://"+a.host.String()+"/update", &gzipped)
 	if err != nil {
 		errors = append(errors, err)
+		return errors
 	}
 	request.Header.Set(`Content-Type`, `application/json`)
 	request.Header.Set(`Accept-Encoding`, `gzip`)
