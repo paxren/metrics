@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"os"
 	"reflect"
 
 	"github.com/caarlos0/env/v11"
@@ -39,6 +40,7 @@ type AgentConfig struct {
 	paramRateLimit      int64
 	paramKey            string
 	paramCryptoKey      string
+	paramConfigFile     string
 }
 
 // NewAgentConfig создаёт новую конфигурацию агента со значениями по умолчанию.
@@ -64,6 +66,8 @@ func (ac *AgentConfig) Init() {
 	flag.Int64Var(&ac.paramRateLimit, "l", 1, "rateLimit")
 	flag.StringVar(&ac.paramKey, "k", "", "hashKey")
 	flag.StringVar(&ac.paramCryptoKey, "crypto-key", "", "path to public key file")
+	flag.StringVar(&ac.paramConfigFile, "c", "", "path to config file")
+	flag.StringVar(&ac.paramConfigFile, "config", "", "path to config file")
 }
 
 // Parse парсит переменные окружения и флаги командной строки.
@@ -72,6 +76,35 @@ func (ac *AgentConfig) Init() {
 // Приоритет отдается флагам командной строки.
 // Должен вызываться после вызова метода Init().
 func (ac *AgentConfig) Parse() {
+	// 1. Сначала парсим переменную окружения CONFIG
+	configPath := os.Getenv("CONFIG")
+
+	// 2. Парсим флаги командной строки (включая -c/-config)
+	flag.Parse()
+
+	// 3. Определяем путь к конфигурационному файлу
+	// Флаг имеет приоритет над переменной окружения
+	if ac.paramConfigFile != "" {
+		configPath = ac.paramConfigFile
+	}
+
+	// 4. Загружаем конфигурацию из файла, если указан
+	var fileCfg *AgentConfigFile
+	if configPath != "" {
+		var err error
+		fileCfg, err = LoadAgentConfigFile(configPath)
+		if err != nil {
+			fmt.Printf("Warning: failed to load config file: %v\n", err)
+		} else {
+			// Валидация конфигурации из файла
+			if err := fileCfg.Validate(); err != nil {
+				fmt.Printf("Warning: invalid config file: %v\n", err)
+				fileCfg = nil
+			}
+		}
+	}
+
+	// 5. Парсим переменные окружения
 	err := env.ParseWithOptions(&ac.envs, env.Options{
 		FuncMap: map[reflect.Type]env.ParserFunc{
 			reflect.TypeOf(HostAddress{}): func(v string) (interface{}, error) {
@@ -106,59 +139,68 @@ func (ac *AgentConfig) Parse() {
 	}
 
 	fmt.Printf("problemVars = %v", problemVars)
-	flag.Parse()
+
+	// 6. Применяем значения с учетом приоритета:
+	//    Флаги > Переменные окружения > Файл конфигурации
 
 	// Address
-	_, ok1 := problemVars["ADDRESS"]
-	_, ok2 := problemVars["Address"]
-	if !ok1 && !ok2 {
-		ac.Address = ac.envs.Address
-	} else {
+	if ac.paramAddress.Host != "" && ac.paramAddress.Port != 0 {
 		ac.Address = ac.paramAddress
+	} else if _, ok := problemVars["ADDRESS"]; !ok && ac.envs.Address.Host != "" {
+		ac.Address = ac.envs.Address
+	} else if fileCfg != nil && fileCfg.Address != "" {
+		ha := NewHostAddress()
+		if err := ha.Set(fileCfg.Address); err == nil {
+			ac.Address = *ha
+		}
 	}
 
 	// ReportInterval
-	_, ok1 = problemVars["REPORT_INTERVAL"]
-	_, ok2 = problemVars["ReportInterval"]
-	if !ok1 && !ok2 {
-		ac.ReportInterval = ac.envs.ReportInterval
-	} else {
+	if ac.paramReportInterval != 0 {
 		ac.ReportInterval = ac.paramReportInterval
+	} else if _, ok := problemVars["REPORT_INTERVAL"]; !ok && ac.envs.ReportInterval != 0 {
+		ac.ReportInterval = ac.envs.ReportInterval
+	} else if fileCfg != nil && fileCfg.ReportInterval != "" {
+		if val, err := ParseDuration(fileCfg.ReportInterval); err == nil {
+			ac.ReportInterval = val
+		}
 	}
 
 	// PollInterval
-	_, ok1 = problemVars["POLL_INTERVAL"]
-	_, ok2 = problemVars["PollInterval"]
-	if !ok1 && !ok2 {
-		ac.PollInterval = ac.envs.PollInterval
-	} else {
+	if ac.paramPollInterval != 0 {
 		ac.PollInterval = ac.paramPollInterval
+	} else if _, ok := problemVars["POLL_INTERVAL"]; !ok && ac.envs.PollInterval != 0 {
+		ac.PollInterval = ac.envs.PollInterval
+	} else if fileCfg != nil && fileCfg.PollInterval != "" {
+		if val, err := ParseDuration(fileCfg.PollInterval); err == nil {
+			ac.PollInterval = val
+		}
 	}
 
 	// RateLimit
-	_, ok1 = problemVars["RATE_LIMIT"]
-	_, ok2 = problemVars["RateLimit"]
-	if !ok1 && !ok2 {
-		ac.RateLimit = ac.envs.RateLimit
-	} else {
+	if ac.paramRateLimit != 0 {
 		ac.RateLimit = ac.paramRateLimit
+	} else if _, ok := problemVars["RATE_LIMIT"]; !ok && ac.envs.RateLimit != 0 {
+		ac.RateLimit = ac.envs.RateLimit
+	} else if fileCfg != nil && fileCfg.RateLimit != 0 {
+		ac.RateLimit = fileCfg.RateLimit
 	}
 
 	// Key
-	_, ok1 = problemVars["KEY"]
-	_, ok2 = problemVars["Key"]
-	if !ok1 && !ok2 {
-		ac.Key = ac.envs.Key
-	} else {
+	if ac.paramKey != "" {
 		ac.Key = ac.paramKey
+	} else if _, ok := problemVars["KEY"]; !ok && ac.envs.Key != "" {
+		ac.Key = ac.envs.Key
+	} else if fileCfg != nil && fileCfg.Key != "" {
+		ac.Key = fileCfg.Key
 	}
 
 	// CryptoKey
-	_, ok1 = problemVars["CRYPTO_KEY"]
-	_, ok2 = problemVars["CryptoKey"]
-	if !ok1 && !ok2 {
-		ac.CryptoKey = ac.envs.CryptoKey
-	} else {
+	if ac.paramCryptoKey != "" {
 		ac.CryptoKey = ac.paramCryptoKey
+	} else if _, ok := problemVars["CRYPTO_KEY"]; !ok && ac.envs.CryptoKey != "" {
+		ac.CryptoKey = ac.envs.CryptoKey
+	} else if fileCfg != nil && fileCfg.CryptoKey != "" {
+		ac.CryptoKey = fileCfg.CryptoKey
 	}
 }
