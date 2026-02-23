@@ -256,7 +256,7 @@ func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 	}
 
 	// Шифруем данные, если есть шифратор
-	var dataToCompress []byte = metricJSON
+	dataToCompress := metricJSON
 	if a.hybridEncryptor != nil {
 		encryptedData, err := a.hybridEncryptor.Encrypt(metricJSON)
 		if err != nil {
@@ -425,7 +425,7 @@ func (a *Agent) work1(metricOut *models.Metrics, client *http.Client, errors []e
 	}
 
 	// Шифруем данные, если есть шифратор
-	var dataToCompress []byte = metricJSON
+	dataToCompress := metricJSON
 	if a.hybridEncryptor != nil {
 		encryptedData, err := a.hybridEncryptor.Encrypt(metricJSON)
 		if err != nil {
