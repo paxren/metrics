@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os/signal"
+	"syscall"
 
 	"github.com/paxren/metrics/internal/agent"
 	"github.com/paxren/metrics/internal/config"
@@ -34,6 +37,10 @@ func main() {
 	fmt.Printf("Build date: %s\n", buildDate)
 	fmt.Printf("Build commit: %s\n", buildCommit)
 
+	// Обработка SIGTERM и SIGINT для graceful shutdown
+	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	// Парсим переменные окружения и флаги
 	agentConfig.Parse()
 
@@ -56,5 +63,15 @@ func main() {
 	)
 
 	done := agentInstance.Start()
-	<-done
+
+	// Ожидаем либо сигнал завершения от ОС, либо завершение работы агента
+	select {
+	case <-rootCtx.Done():
+		// Получен сигнал SIGINT или SIGTERM
+		stop()
+		agentInstance.Finish()
+	case <-done:
+		// Агент завершил работу самостоятельно
+		stop()
+	}
 }
