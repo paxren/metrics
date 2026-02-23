@@ -43,6 +43,7 @@ func main() {
 	fmt.Printf("Poll interval: %d\n", agentConfig.PollInterval)
 	fmt.Printf("Rate limiter: %d\n", agentConfig.RateLimit)
 	fmt.Printf("Key: %s\n", agentConfig.Key)
+	fmt.Printf("Crypto key: %s\n", agentConfig.CryptoKey)
 
 	// Создаем и запускаем агента с новой конфигурацией
 	agentInstance := agent.NewAgentExtended(
@@ -51,6 +52,7 @@ func main() {
 		agentConfig.RateLimit,
 		agentConfig.PollInterval,
 		agentConfig.ReportInterval,
+		agentConfig.CryptoKey,
 	)
 
 	done := agentInstance.Start()

@@ -9,6 +9,7 @@ import (
 
 	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
+	"github.com/paxren/metrics/internal/crypto"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
 
@@ -162,6 +163,25 @@ func main() {
 
 	hasher := handler.NewHasher(serverConfig.Key)
 
+	// Создаём дешифратор, если указан путь к приватному ключу
+	var cryptoMiddleware *handler.CryptoMiddleware
+	if serverConfig.CryptoKey != "" {
+		hybridDecryptor, err := crypto.NewHybridDecryptor(serverConfig.CryptoKey)
+		if err != nil {
+			sugar.Fatal(
+				"Failed to load private key",
+				"error", err,
+			)
+		}
+		// Создаем адаптер для совместимости с существующим middleware
+		decryptor := crypto.NewHybridDecryptorAdapter(hybridDecryptor)
+		cryptoMiddleware = handler.NewCryptoMiddleware(decryptor)
+		sugar.Infow(
+			"Hybrid crypto middleware enabled",
+			"key", serverConfig.CryptoKey,
+		)
+	}
+
 	// Создаём менеджер сжатия
 	compressionConfig, err := handler.ParseCompressionConfig()
 	if err != nil {
@@ -202,10 +222,19 @@ func main() {
 
 	// Применяем middleware ко всем эндпоинтам обновления метрик
 	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
-	r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
-	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+
+	// Для JSON эндпоинтов применяем crypto middleware, если он настроен
+	if cryptoMiddleware != nil {
+		r.Post(`/update/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdateJSON))))))
+		r.Post(`/update`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdateJSON))))))
+		r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdatesJSON))))))
+		r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdatesJSON))))))
+	} else {
+		r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+		r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
+		r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+		r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+	}
 
 	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
 	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))

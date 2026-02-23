@@ -1,0 +1,1 @@
+{"address": "localhost:8080", "restore": true, "store_interval": "300s", "store_file": "/tmp/metrics.db", "database_dsn": "", "key": "test_key", "audit_file": "/tmp/audit.log", "audit_url": "http://localhost:9000/audit", "crypto_key": "/path/to/private_key.pem"}
