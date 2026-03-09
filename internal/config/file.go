@@ -15,6 +15,7 @@ type AgentConfigFile struct {
 	RateLimit      int64  `json:"rate_limit"`
 	Key            string `json:"key"`
 	CryptoKey      string `json:"crypto_key"`
+	GRPCAddress    string `json:"grpc_address"`
 }
 
 // ServerConfigFile представляет конфигурацию сервера из JSON файла
@@ -28,6 +29,8 @@ type ServerConfigFile struct {
 	AuditFile     string `json:"audit_file"`
 	AuditURL      string `json:"audit_url"`
 	CryptoKey     string `json:"crypto_key"`
+	TrustedSubnet string `json:"trusted_subnet"`
+	GRPCAddress   string `json:"grpc_address"`
 }
 
 // LoadAgentConfigFile загружает конфигурацию агента из JSON файла

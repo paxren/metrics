@@ -19,6 +19,7 @@ type AgentConfigEnv struct {
 	RateLimit      int64       `env:"RATE_LIMIT,notEmpty"`
 	Key            string      `env:"KEY,notEmpty"`
 	CryptoKey      string      `env:"CRYPTO_KEY,notEmpty"`
+	GRPCAddress    HostAddress `env:"GRPC_ADDRESS,notEmpty"`
 }
 
 // AgentConfig представляет полную конфигурацию агента.
@@ -33,6 +34,7 @@ type AgentConfig struct {
 	RateLimit      int64
 	Key            string
 	CryptoKey      string
+	GRPCAddress    HostAddress
 
 	paramAddress        HostAddress
 	paramReportInterval int64
@@ -40,6 +42,7 @@ type AgentConfig struct {
 	paramRateLimit      int64
 	paramKey            string
 	paramCryptoKey      string
+	paramGRPCAddress    HostAddress
 	paramConfigFile     string
 }
 
@@ -66,6 +69,7 @@ func (ac *AgentConfig) Init() {
 	flag.Int64Var(&ac.paramRateLimit, "l", 1, "rateLimit")
 	flag.StringVar(&ac.paramKey, "k", "", "hashKey")
 	flag.StringVar(&ac.paramCryptoKey, "crypto-key", "", "path to public key file")
+	flag.Var(&ac.paramGRPCAddress, "grpc-a", "gRPC server address host:port")
 	flag.StringVar(&ac.paramConfigFile, "c", "", "path to config file")
 	flag.StringVar(&ac.paramConfigFile, "config", "", "path to config file")
 }
@@ -202,5 +206,17 @@ func (ac *AgentConfig) Parse() {
 		ac.CryptoKey = ac.envs.CryptoKey
 	} else if fileCfg != nil && fileCfg.CryptoKey != "" {
 		ac.CryptoKey = fileCfg.CryptoKey
+	}
+
+	// GRPCAddress
+	if ac.paramGRPCAddress.Host != "" && ac.paramGRPCAddress.Port != 0 {
+		ac.GRPCAddress = ac.paramGRPCAddress
+	} else if _, ok := problemVars["GRPC_ADDRESS"]; !ok && ac.envs.GRPCAddress.Host != "" {
+		ac.GRPCAddress = ac.envs.GRPCAddress
+	} else if fileCfg != nil && fileCfg.GRPCAddress != "" {
+		ha := NewHostAddress()
+		if err := ha.Set(fileCfg.GRPCAddress); err == nil {
+			ac.GRPCAddress = *ha
+		}
 	}
 }

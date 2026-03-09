@@ -46,6 +46,7 @@ func main() {
 
 	// Выводим конфигурацию для отладки
 	fmt.Printf("Address: %v\n", agentConfig.Address)
+	fmt.Printf("gRPC Address: %v\n", agentConfig.GRPCAddress)
 	fmt.Printf("Report interval: %d\n", agentConfig.ReportInterval)
 	fmt.Printf("Poll interval: %d\n", agentConfig.PollInterval)
 	fmt.Printf("Rate limiter: %d\n", agentConfig.RateLimit)
@@ -55,6 +56,7 @@ func main() {
 	// Создаем и запускаем агента с новой конфигурацией
 	agentInstance := agent.NewAgentExtended(
 		agentConfig.Address,
+		agentConfig.GRPCAddress,
 		agentConfig.Key,
 		agentConfig.RateLimit,
 		agentConfig.PollInterval,

@@ -22,6 +22,8 @@ type ServerConfigEnv struct {
 	AuditFile       string      `env:"AUDIT_FILE,notEmpty"`
 	AuditURL        string      `env:"AUDIT_URL,notEmpty"`
 	CryptoKey       string      `env:"CRYPTO_KEY,notEmpty"`
+	TrustedSubnet   string      `env:"TRUSTED_SUBNET,notEmpty"`
+	GRPCAddress     HostAddress `env:"GRPC_ADDRESS,notEmpty"`
 }
 
 // ServerConfig представляет полную конфигурацию сервера.
@@ -39,6 +41,8 @@ type ServerConfig struct {
 	AuditFile       string
 	AuditURL        string
 	CryptoKey       string
+	TrustedSubnet   string
+	GRPCAddress     HostAddress
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
@@ -49,6 +53,8 @@ type ServerConfig struct {
 	paramAuditFile       string
 	paramAuditURL        string
 	paramCryptoKey       string
+	paramTrustedSubnet   string
+	paramGRPCAddress     HostAddress
 	paramConfigFile      string
 }
 
@@ -80,6 +86,8 @@ func (se *ServerConfig) Init() {
 	flag.StringVar(&se.paramAuditFile, "audit-file", "", "path to audit file")
 	flag.StringVar(&se.paramAuditURL, "audit-url", "", "URL for audit logs")
 	flag.StringVar(&se.paramCryptoKey, "crypto-key", "", "path to private key file")
+	flag.StringVar(&se.paramTrustedSubnet, "t", "", "trusted subnet in CIDR format")
+	flag.Var(&se.paramGRPCAddress, "grpc-a", "gRPC server address host:port")
 	flag.StringVar(&se.paramConfigFile, "c", "", "path to config file")
 	flag.StringVar(&se.paramConfigFile, "config", "", "path to config file")
 }
@@ -241,5 +249,26 @@ func (se *ServerConfig) Parse() {
 		se.CryptoKey = se.envs.CryptoKey
 	} else if fileCfg != nil && fileCfg.CryptoKey != "" {
 		se.CryptoKey = fileCfg.CryptoKey
+	}
+
+	// TrustedSubnet
+	if se.paramTrustedSubnet != "" {
+		se.TrustedSubnet = se.paramTrustedSubnet
+	} else if _, ok := problemVars["TRUSTED_SUBNET"]; !ok && se.envs.TrustedSubnet != "" {
+		se.TrustedSubnet = se.envs.TrustedSubnet
+	} else if fileCfg != nil && fileCfg.TrustedSubnet != "" {
+		se.TrustedSubnet = fileCfg.TrustedSubnet
+	}
+
+	// GRPCAddress
+	if se.paramGRPCAddress.Host != "" && se.paramGRPCAddress.Port != 0 {
+		se.GRPCAddress = se.paramGRPCAddress
+	} else if _, ok := problemVars["GRPC_ADDRESS"]; !ok && se.envs.GRPCAddress.Host != "" {
+		se.GRPCAddress = se.envs.GRPCAddress
+	} else if fileCfg != nil && fileCfg.GRPCAddress != "" {
+		ha := NewHostAddress()
+		if err := ha.Set(fileCfg.GRPCAddress); err == nil {
+			se.GRPCAddress = *ha
+		}
 	}
 }

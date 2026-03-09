@@ -10,6 +10,7 @@ import (
 	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/crypto"
+	grpcpkg "github.com/paxren/metrics/internal/grpc"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
 
@@ -195,6 +196,42 @@ func main() {
 	compressionManager := handler.NewCompressionManager(compressionConfig)
 	compressor := handler.NewCompressor(compressionManager)
 
+	// Создаём middleware для проверки доверенной подсети
+	var trustedSubnetMW *handler.TrustedSubnetMiddleware
+	if serverConfig.TrustedSubnet != "" {
+		trustedSubnetMW, err = handler.NewTrustedSubnetMiddleware(serverConfig.TrustedSubnet)
+		if err != nil {
+			sugar.Fatal(
+				"Failed to parse trusted subnet",
+				"error", err,
+				"subnet", serverConfig.TrustedSubnet,
+			)
+		}
+		sugar.Infow(
+			"Trusted subnet middleware enabled",
+			"subnet", serverConfig.TrustedSubnet,
+		)
+	}
+
+	// Запускаем gRPC-сервер, если указан адрес
+	var grpcServer interface {
+		Stop()
+	}
+	if serverConfig.GRPCAddress.Host != "" && serverConfig.GRPCAddress.Port != 0 {
+		var err error
+		grpcServer, err = grpcpkg.StartServer(serverConfig, storage, logger, trustedSubnetMW)
+		if err != nil {
+			sugar.Fatal(
+				"Failed to start gRPC server",
+				"error", err,
+			)
+		}
+		sugar.Infow(
+			"gRPC server started",
+			"address", serverConfig.GRPCAddress.String(),
+		)
+	}
+
 	// Создаём наблюдателей для аудита
 	var auditObservers []audit.Observer
 
@@ -221,20 +258,41 @@ func main() {
 	r := chi.NewRouter()
 
 	// Применяем middleware ко всем эндпоинтам обновления метрик
-	r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
-
-	// Для JSON эндпоинтов применяем crypto middleware, если он настроен
-	if cryptoMiddleware != nil {
-		r.Post(`/update/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdateJSON))))))
-		r.Post(`/update`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdateJSON))))))
-		r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdatesJSON))))))
-		r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdatesJSON))))))
+	if trustedSubnetMW != nil {
+		r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(trustedSubnetMW.Check(handlerv.UpdateMetric))))
 	} else {
-		r.Post(`/update/`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-		r.Post(`/update`, hasher.HashMiddleware(hlog.WithLogging(auditor.WithAudit(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON)))))
-		r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
-		r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON)))))
+		r.Post(`/update/{metric_type}/{metric_name}/{metric_value}`, hlog.WithLogging(auditor.WithAudit(handlerv.UpdateMetric)))
 	}
+
+	// Для JSON эндпоинтов применяем middleware
+	var updateJSONHandler http.HandlerFunc
+	if cryptoMiddleware != nil {
+		updateJSONHandler = hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdateJSON)))
+	} else {
+		updateJSONHandler = hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdateJSON))
+	}
+
+	// Применяем trusted subnet middleware, если он настроен
+	if trustedSubnetMW != nil {
+		updateJSONHandler = trustedSubnetMW.Check(updateJSONHandler)
+	}
+
+	r.Post(`/update/`, hlog.WithLogging(auditor.WithAudit(updateJSONHandler)))
+	r.Post(`/update`, hlog.WithLogging(auditor.WithAudit(updateJSONHandler)))
+
+	var updatesJSONHandler http.HandlerFunc
+	if cryptoMiddleware != nil {
+		updatesJSONHandler = hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(cryptoMiddleware.DecryptMiddleware(handlerv.UpdatesJSON)))
+	} else {
+		updatesJSONHandler = hasher.HashMiddleware(compressor.OptimizedGzipMiddleware(handlerv.UpdatesJSON))
+	}
+
+	if trustedSubnetMW != nil {
+		updatesJSONHandler = trustedSubnetMW.Check(updatesJSONHandler)
+	}
+
+	r.Post(`/updates`, hlog.WithLogging(auditor.WithAudit(updatesJSONHandler)))
+	r.Post(`/updates/`, hlog.WithLogging(auditor.WithAudit(updatesJSONHandler)))
 
 	r.Post(`/value/`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
 	r.Post(`/value`, hasher.HashMiddleware(hlog.WithLogging(compressor.OptimizedGzipMiddleware(handlerv.GetValueJSON))))
@@ -279,6 +337,13 @@ func main() {
 	stop()
 
 	server.Shutdown(context.Background())
+
+	// Останавливаем gRPC-сервер, если он был запущен
+	if grpcServer != nil {
+		grpcServer.Stop()
+		sugar.Info("gRPC server stopped")
+	}
+
 	for _, f := range finish {
 		f()
 	}
