@@ -28,6 +28,7 @@ type ServerConfigFile struct {
 	AuditFile     string `json:"audit_file"`
 	AuditURL      string `json:"audit_url"`
 	CryptoKey     string `json:"crypto_key"`
+	TrustedSubnet string `json:"trusted_subnet"`
 }
 
 // LoadAgentConfigFile загружает конфигурацию агента из JSON файла
