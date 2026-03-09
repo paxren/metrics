@@ -20,8 +20,7 @@ type mockMetricsServer struct {
 func (m *mockMetricsServer) UpdateMetrics(ctx context.Context, req *proto.UpdateMetricsRequest) (*proto.UpdateMetricsResponse, error) {
 	for _, metric := range req.Metrics {
 		metricModel := models.Metrics{
-			ID:    metric.Id,
-			MType: "gauge",
+			ID: metric.Id,
 		}
 		if metric.Type == proto.Metric_GAUGE {
 			metricModel.Value = &metric.Value
