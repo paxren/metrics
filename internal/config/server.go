@@ -23,6 +23,7 @@ type ServerConfigEnv struct {
 	AuditURL        string      `env:"AUDIT_URL,notEmpty"`
 	CryptoKey       string      `env:"CRYPTO_KEY,notEmpty"`
 	TrustedSubnet   string      `env:"TRUSTED_SUBNET,notEmpty"`
+	GRPCAddress     HostAddress `env:"GRPC_ADDRESS,notEmpty"`
 }
 
 // ServerConfig представляет полную конфигурацию сервера.
@@ -41,6 +42,7 @@ type ServerConfig struct {
 	AuditURL        string
 	CryptoKey       string
 	TrustedSubnet   string
+	GRPCAddress     HostAddress
 
 	paramAddress         HostAddress
 	paramStoreInterval   uint64
@@ -52,6 +54,7 @@ type ServerConfig struct {
 	paramAuditURL        string
 	paramCryptoKey       string
 	paramTrustedSubnet   string
+	paramGRPCAddress     HostAddress
 	paramConfigFile      string
 }
 
@@ -84,6 +87,7 @@ func (se *ServerConfig) Init() {
 	flag.StringVar(&se.paramAuditURL, "audit-url", "", "URL for audit logs")
 	flag.StringVar(&se.paramCryptoKey, "crypto-key", "", "path to private key file")
 	flag.StringVar(&se.paramTrustedSubnet, "t", "", "trusted subnet in CIDR format")
+	flag.Var(&se.paramGRPCAddress, "grpc-a", "gRPC server address host:port")
 	flag.StringVar(&se.paramConfigFile, "c", "", "path to config file")
 	flag.StringVar(&se.paramConfigFile, "config", "", "path to config file")
 }
@@ -254,5 +258,17 @@ func (se *ServerConfig) Parse() {
 		se.TrustedSubnet = se.envs.TrustedSubnet
 	} else if fileCfg != nil && fileCfg.TrustedSubnet != "" {
 		se.TrustedSubnet = fileCfg.TrustedSubnet
+	}
+
+	// GRPCAddress
+	if se.paramGRPCAddress.Host != "" && se.paramGRPCAddress.Port != 0 {
+		se.GRPCAddress = se.paramGRPCAddress
+	} else if _, ok := problemVars["GRPC_ADDRESS"]; !ok && se.envs.GRPCAddress.Host != "" {
+		se.GRPCAddress = se.envs.GRPCAddress
+	} else if fileCfg != nil && fileCfg.GRPCAddress != "" {
+		ha := NewHostAddress()
+		if err := ha.Set(fileCfg.GRPCAddress); err == nil {
+			se.GRPCAddress = *ha
+		}
 	}
 }

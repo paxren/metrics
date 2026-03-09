@@ -10,6 +10,7 @@ import (
 	"github.com/paxren/metrics/internal/audit"
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/crypto"
+	grpcpkg "github.com/paxren/metrics/internal/grpc"
 	"github.com/paxren/metrics/internal/handler"
 	"github.com/paxren/metrics/internal/repository"
 
@@ -212,6 +213,25 @@ func main() {
 		)
 	}
 
+	// Запускаем gRPC-сервер, если указан адрес
+	var grpcServer interface {
+		Stop()
+	}
+	if serverConfig.GRPCAddress.Host != "" && serverConfig.GRPCAddress.Port != 0 {
+		var err error
+		grpcServer, err = grpcpkg.StartServer(serverConfig, storage, logger, trustedSubnetMW)
+		if err != nil {
+			sugar.Fatal(
+				"Failed to start gRPC server",
+				"error", err,
+			)
+		}
+		sugar.Infow(
+			"gRPC server started",
+			"address", serverConfig.GRPCAddress.String(),
+		)
+	}
+
 	// Создаём наблюдателей для аудита
 	var auditObservers []audit.Observer
 
@@ -317,6 +337,13 @@ func main() {
 	stop()
 
 	server.Shutdown(context.Background())
+
+	// Останавливаем gRPC-сервер, если он был запущен
+	if grpcServer != nil {
+		grpcServer.Stop()
+		sugar.Info("gRPC server stopped")
+	}
+
 	for _, f := range finish {
 		f()
 	}

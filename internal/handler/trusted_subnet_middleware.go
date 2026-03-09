@@ -73,3 +73,30 @@ func (tm *TrustedSubnetMiddleware) Check(next http.HandlerFunc) http.HandlerFunc
 		next(w, r)
 	}
 }
+
+// ParseIP парсит IP-адрес из строки
+//
+// Параметры:
+//   - ipStr: строковое представление IP-адреса
+//
+// Возвращает:
+//   - net.IP: распарсенный IP-адрес или nil при ошибке
+func (tm *TrustedSubnetMiddleware) ParseIP(ipStr string) net.IP {
+	return net.ParseIP(ipStr)
+}
+
+// Contains проверяет, принадлежит ли IP-адрес к доверенной подсети
+//
+// Если trustedSubnet равен nil - возвращает true (пропускает все IP).
+//
+// Параметры:
+//   - ip: IP-адрес для проверки
+//
+// Возвращает:
+//   - bool: true, если IP в доверенной подсети или подсеть не задана
+func (tm *TrustedSubnetMiddleware) Contains(ip net.IP) bool {
+	if tm.trustedSubnet == nil {
+		return true
+	}
+	return tm.trustedSubnet.Contains(ip)
+}

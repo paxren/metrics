@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/crypto"
+	grpcpkg "github.com/paxren/metrics/internal/grpc"
 	"github.com/paxren/metrics/internal/hash"
 	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
@@ -48,6 +50,8 @@ type Agent struct {
 	done            chan struct{}
 	cryptoEncryptor *crypto.Encryptor
 	hybridEncryptor *crypto.HybridEncryptor
+	grpcClient      *grpcpkg.Client
+	useGRPC         bool
 }
 
 // оставлено для совместимости с тестами
@@ -72,7 +76,7 @@ func NewAgent(host config.HostAddress) *Agent {
 	return agent
 }
 
-func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64, cryptoKeyPath string) *Agent {
+func NewAgentExtended(host config.HostAddress, grpcAddr config.HostAddress, key string, num int64, pollInterval int64, reportInterval int64, cryptoKeyPath string) *Agent {
 
 	//fmt.Println("======dfsdfs==========")
 	agent := NewAgent(host)
@@ -107,6 +111,20 @@ func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterv
 		}
 	}
 
+	// Инициализируем gRPC-клиент, если указан адрес
+	if grpcAddr.Host != "" && grpcAddr.Port != 0 {
+		grpcClient, err := grpcpkg.NewClient(&config.AgentConfig{
+			GRPCAddress: grpcAddr,
+		})
+		if err != nil {
+			fmt.Printf("Failed to create gRPC client: %v\n", err)
+		} else {
+			agent.grpcClient = grpcClient
+			agent.useGRPC = true
+			fmt.Printf("gRPC client initialized, using gRPC protocol\n")
+		}
+	}
+
 	//fmt.Printf("agent %v\n", agent)
 	//agent.startWorkers()
 
@@ -114,6 +132,10 @@ func NewAgentExtended(host config.HostAddress, key string, num int64, pollInterv
 }
 
 func (a *Agent) Finish() {
+	// Закрываем gRPC-клиент, если он был инициализирован
+	if a.grpcClient != nil {
+		a.grpcClient.Close()
+	}
 	//тут прекращаем всё работу агента
 	close(a.jobs)
 	close(a.done)
@@ -371,7 +393,32 @@ func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 }
 
 func (a *Agent) SendAll(metrics []models.Metrics) []error {
+	// Если включен gRPC, используем gRPC-клиент
+	if a.useGRPC && a.grpcClient != nil {
+		return a.sendMetricsViaGRPC(metrics)
+	}
 
+	// Иначе используем HTTP
+	return a.sendMetricsViaHTTP(metrics)
+}
+
+// sendMetricsViaGRPC отправляет метрики через gRPC
+func (a *Agent) sendMetricsViaGRPC(metrics []models.Metrics) []error {
+	errors := make([]error, 0)
+
+	err := a.grpcClient.SendMetrics(context.Background(), metrics)
+	if err != nil {
+		errors = append(errors, fmt.Errorf("gRPC send failed: %w", err))
+		fmt.Printf("gRPC send error: %v\n", err)
+		return errors
+	}
+
+	fmt.Printf("Successfully sent %d metrics via gRPC\n", len(metrics))
+	return errors
+}
+
+// sendMetricsViaHTTP отправляет метрики через HTTP
+func (a *Agent) sendMetricsViaHTTP(metrics []models.Metrics) []error {
 	errors := make([]error, 0)
 
 	client := http.Client{}
