@@ -9,6 +9,7 @@ import (
 	"github.com/paxren/metrics/internal/proto"
 	"github.com/paxren/metrics/internal/repository"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/metadata"
 )
 
 // mockMetricsServer реализует интерфейс proto.MetricsServer для тестирования
@@ -188,6 +189,8 @@ func TestServer_UpdateMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Создаём контекст с метаданными
 			ctx := context.Background()
+			md := metadata.New(map[string]string{"x-real-ip": tt.clientIP})
+			ctx = metadata.NewIncomingContext(ctx, md)
 
 			// Вызываем UpdateMetrics
 			resp, err := server.UpdateMetrics(ctx, &proto.UpdateMetricsRequest{

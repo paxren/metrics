@@ -3,10 +3,10 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"net"
 
 	"github.com/paxren/metrics/internal/config"
 	"github.com/paxren/metrics/internal/models"
+	"github.com/paxren/metrics/internal/netutil"
 	"github.com/paxren/metrics/internal/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -42,7 +42,7 @@ func NewClient(cfg *config.AgentConfig) (*Client, error) {
 	}
 
 	// Получаем локальный IP-адрес
-	localIP, err := getLocalIP()
+	localIP, err := netutil.GetLocalIP()
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to get local IP: %w", err)
@@ -142,59 +142,4 @@ func (c *Client) stringToMType(mt string) proto.Metric_MType {
 	default:
 		return proto.Metric_GAUGE
 	}
-}
-
-// getLocalIP возвращает локальный IP-адрес машины
-//
-// Перебирает сетевые интерфейсы и возвращает первый непустой IP-адрес,
-// исключая loopback интерфейсы.
-//
-// Возвращает:
-//   - string: строковое представление IP-адреса
-//   - error: ошибка при получении IP
-func getLocalIP() (string, error) {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return "", err
-	}
-
-	for _, iface := range interfaces {
-		// Пропускаем отключенные интерфейсы
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-
-		// Пропускаем loopback интерфейсы
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-
-			// Пропускаем nil IP
-			if ip == nil || ip.IsLoopback() {
-				continue
-			}
-
-			// Возвращаем первый найденный IPv4 адрес
-			ip = ip.To4()
-			if ip != nil {
-				return ip.String(), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no valid IP address found")
 }
