@@ -1,8 +1,15 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand/v2"
+	"net"
+	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -14,14 +21,6 @@ import (
 	"github.com/paxren/metrics/internal/hash"
 	"github.com/paxren/metrics/internal/models"
 	"github.com/paxren/metrics/internal/repository"
-
-	"io"
-	"net/http"
-	"os"
-
-	"bytes"
-	"compress/gzip"
-	"encoding/json"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -118,6 +117,62 @@ func (a *Agent) Finish() {
 	//тут прекращаем всё работу агента
 	close(a.jobs)
 	close(a.done)
+}
+
+// getLocalIP возвращает локальный IP-адрес машины
+//
+// Перебирает сетевые интерфейсы и возвращает первый непустой IP-адрес,
+// исключая loopback интерфейсы.
+//
+// Возвращает:
+//   - string: строковое представление IP-адреса
+//   - error: ошибка при получении IP
+func (a *Agent) getLocalIP() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+
+	for _, iface := range interfaces {
+		// Пропускаем отключенные интерфейсы
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		// Пропускаем loopback интерфейсы
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+
+			// Предпочитаем IPv4
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("no valid IP address found")
 }
 
 func (a *Agent) Start() <-chan struct{} {
@@ -290,6 +345,14 @@ func (a *Agent) makeRequest(metrics []models.Metrics) (*http.Request, []error) {
 	request.Header.Set(`Content-Type`, `application/json`)
 	request.Header.Set(`Accept-Encoding`, `gzip`)
 	request.Header.Set(`Content-Encoding`, `gzip`)
+
+	// Добавляем заголовок X-Real-IP
+	localIP, err := a.getLocalIP()
+	if err != nil {
+		errors = append(errors, fmt.Errorf("failed to get local IP: %w", err))
+		return nil, errors
+	}
+	request.Header.Set("X-Real-IP", localIP)
 
 	fmt.Println("a1")
 	if a.hashKeyBytes != nil {
